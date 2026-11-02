@@ -1,0 +1,53 @@
+{
+  "privileges": [],
+  "dataRoles": [
+    { "name": "x", "displayName": "X (column)", "kind": "Grouping" },
+    { "name": "y", "displayName": "Y (row)", "kind": "Grouping" },
+    { "name": "z", "displayName": "Z (level)", "kind": "Grouping" },
+    { "name": "value", "displayName": "Value (e.g. Inventory)", "kind": "Measure" },
+    { "name": "tooltips", "displayName": "Tooltips", "kind": "GroupingOrMeasure" }
+  ],
+  "dataViewMappings": [
+    {
+      "table": {
+        "rows": {
+          "select": [
+            { "for": { "in": "x" } },
+            { "for": { "in": "y" } },
+            { "for": { "in": "z" } },
+            { "for": { "in": "value" } },
+            { "for": { "in": "tooltips" } }
+          ],
+          "dataReductionAlgorithm": { "top": { "count": 30000 } }
+        }
+      }
+    }
+  ],
+  "tooltips": {
+    "supportedTypes": { "default": true, "canvas": true },
+    "roles": ["tooltips"]
+  },
+  "objects": {
+    "scale": {
+      "properties": {
+        "low": { "type": { "numeric": true } },
+        "medium": { "type": { "numeric": true } },
+        "high": { "type": { "numeric": true } },
+        "critical": { "type": { "numeric": true } },
+        "lowColor": { "type": { "fill": { "solid": { "color": true } } } },
+        "mediumColor": { "type": { "fill": { "solid": { "color": true } } } },
+        "highColor": { "type": { "fill": { "solid": { "color": true } } } },
+        "criticalColor": { "type": { "fill": { "solid": { "color": true } } } }
+      }
+    },
+    "layout": {
+      "properties": {
+        "cubeSize": { "type": { "numeric": true } },
+        "levelSpacing": { "type": { "numeric": true } },
+        "showFloor": { "type": { "bool": true } },
+        "showLegend": { "type": { "bool": true } }
+      }
+    }
+  },
+  "supportsMultiVisualSelection": true
+}

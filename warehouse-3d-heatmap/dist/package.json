@@ -1,0 +1,17 @@
+{
+		"version": "1.0.0.0",
+		"author": {"name":"Your Name","email":"you@example.com"},
+		"resources": [
+			{
+				"resourceId": "rId0",
+				"sourceType": 5,
+				"file": "resources/warehouse3dHeatmap1A2B3C4D5E6F.pbiviz.json"
+			}
+		],
+		"visual": {"name":"warehouse3dHeatmap","displayName":"Warehouse 3D Heatmap","guid":"warehouse3dHeatmap1A2B3C4D5E6F","visualClassName":"Visual","version":"1.0.0.0","description":"Plots rows as 3D cubes at X/Y/Z positions, colored by a measure such as inventory.","supportUrl":"https://example.com","gitHubUrl":""},
+		"metadata": {
+			"pbivizjson": {
+				"resourceId": "rId0"
+			}
+		}
+	}

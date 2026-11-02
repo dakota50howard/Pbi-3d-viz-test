@@ -1,0 +1,19 @@
+{
+  "name": "warehouse-3d-heatmap",
+  "version": "1.0.0",
+  "description": "3D heatmap of X/Y/Z positions colored by a measure (e.g. inventory)",
+  "scripts": {
+    "start": "pbiviz start",
+    "package": "pbiviz package"
+  },
+  "dependencies": {
+    "powerbi-visuals-api": "~5.11.0",
+    "powerbi-visuals-utils-formattingmodel": "^6.0.0",
+    "three": "^0.160.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.160.0",
+    "powerbi-visuals-tools": "^6.0.0",
+    "typescript": "^5.3.0"
+  }
+}
