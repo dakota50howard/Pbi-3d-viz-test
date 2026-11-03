@@ -252,32 +252,24 @@ export class Visual implements IVisual {
         });
     }
 
-    // Choose the thresholds: a profile whose name matches the Metric name field, else the default scale.
+    // Thresholds come from the Color scale card (or auto-scale). The minimum is never below 0.
     private resolveScale(): void {
-        const st = this.settings;
-        let pick = {
-            low: st.scaleCard.low.value, med: st.scaleCard.medium.value,
-            high: st.scaleCard.high.value, crit: st.scaleCard.critical.value, auto: st.scaleCard.auto.value,
-        };
-        const key = this.metricName.trim().toLowerCase();
-        if (key) {
-            for (const p of [st.profile1, st.profile2, st.profile3]) {
-                if (p.metricName.value.trim().toLowerCase() === key) {
-                    pick = { low: p.low.value, med: p.medium.value, high: p.high.value, crit: p.critical.value, auto: p.auto.value };
-                    break;
-                }
-            }
-        }
-        if (pick.auto) {
+        const sc = this.settings.scaleCard;
+        let low = sc.low.value, med = sc.medium.value, high = sc.high.value, crit = sc.critical.value;
+        if (sc.auto.value) {
             const vals = this.cells.map((c) => c.value).filter((v): v is number => v != null).sort((a, b) => a - b);
             if (vals.length) {
                 const lo = vals[0];
                 let hi = vals[Math.min(vals.length - 1, Math.floor(vals.length * 0.95))];
                 if (hi <= lo) hi = lo + 1;
-                pick = { ...pick, low: lo, med: lo + (hi - lo) / 3, high: lo + (2 * (hi - lo)) / 3, crit: hi };
+                low = lo; med = lo + (hi - lo) / 3; high = lo + (2 * (hi - lo)) / 3; crit = hi;
             }
         }
-        this.active = { low: pick.low, med: pick.med, high: pick.high, crit: pick.crit };
+        low = Math.max(0, low);
+        med = Math.max(low, med);
+        high = Math.max(med, high);
+        crit = Math.max(high, crit);
+        this.active = { low, med, high, crit };
     }
 
     // ---------- scene ----------

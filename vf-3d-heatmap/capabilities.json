@@ -23,7 +23,7 @@
     },
     {
       "name": "metric",
-      "displayName": "Metric name (for color profiles)",
+      "displayName": "Metric name (legend title, optional)",
       "kind": "GroupingOrMeasure"
     },
     {
@@ -208,108 +208,6 @@
                 "color": true
               }
             }
-          }
-        }
-      }
-    },
-    "profile1": {
-      "properties": {
-        "metricName": {
-          "type": {
-            "text": true
-          }
-        },
-        "low": {
-          "type": {
-            "numeric": true
-          }
-        },
-        "medium": {
-          "type": {
-            "numeric": true
-          }
-        },
-        "high": {
-          "type": {
-            "numeric": true
-          }
-        },
-        "critical": {
-          "type": {
-            "numeric": true
-          }
-        },
-        "auto": {
-          "type": {
-            "bool": true
-          }
-        }
-      }
-    },
-    "profile2": {
-      "properties": {
-        "metricName": {
-          "type": {
-            "text": true
-          }
-        },
-        "low": {
-          "type": {
-            "numeric": true
-          }
-        },
-        "medium": {
-          "type": {
-            "numeric": true
-          }
-        },
-        "high": {
-          "type": {
-            "numeric": true
-          }
-        },
-        "critical": {
-          "type": {
-            "numeric": true
-          }
-        },
-        "auto": {
-          "type": {
-            "bool": true
-          }
-        }
-      }
-    },
-    "profile3": {
-      "properties": {
-        "metricName": {
-          "type": {
-            "text": true
-          }
-        },
-        "low": {
-          "type": {
-            "numeric": true
-          }
-        },
-        "medium": {
-          "type": {
-            "numeric": true
-          }
-        },
-        "high": {
-          "type": {
-            "numeric": true
-          }
-        },
-        "critical": {
-          "type": {
-            "numeric": true
-          }
-        },
-        "auto": {
-          "type": {
-            "bool": true
           }
         }
       }

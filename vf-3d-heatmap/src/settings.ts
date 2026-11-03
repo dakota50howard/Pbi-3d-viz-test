@@ -1,12 +1,14 @@
+import powerbi from "powerbi-visuals-api";
 import { formattingSettings } from "powerbi-visuals-utils-formattingmodel";
 
-const { SimpleCard, Model, NumUpDown, ColorPicker, ToggleSwitch, TextInput } = formattingSettings;
+const { SimpleCard, Model, NumUpDown, ColorPicker, ToggleSwitch } = formattingSettings;
 
 class ScaleCard extends SimpleCard {
     name = "scale";
-    displayName = "Color scale (default)";
+    displayName = "Color scale";
 
-    low = new NumUpDown({ name: "low", displayName: "Low (minimum)", value: 0 });
+    low = new NumUpDown({ name: "low", displayName: "Low (minimum, 0 or more)", value: 0,
+        options: { minValue: { value: 0, type: powerbi.visuals.ValidatorType.Min } } });
     medium = new NumUpDown({ name: "medium", displayName: "Medium", value: 5 });
     high = new NumUpDown({ name: "high", displayName: "High", value: 10 });
     critical = new NumUpDown({ name: "critical", displayName: "Critical", value: 15 });
@@ -19,32 +21,6 @@ class ScaleCard extends SimpleCard {
 
     slices = [this.low, this.medium, this.high, this.critical, this.auto,
         this.lowColor, this.mediumColor, this.highColor, this.criticalColor];
-}
-
-// One color profile per metric. It is used when the "Metric name" field matches its name.
-class ProfileCard extends SimpleCard {
-    declare name: string;
-    declare displayName: string;
-    metricName!: formattingSettings.TextInput;
-    low!: formattingSettings.NumUpDown;
-    medium!: formattingSettings.NumUpDown;
-    high!: formattingSettings.NumUpDown;
-    critical!: formattingSettings.NumUpDown;
-    auto!: formattingSettings.ToggleSwitch;
-    declare slices: formattingSettings.Slice[];
-
-    constructor(n: number, metric: string, lo: number, med: number, hi: number, crit: number) {
-        super();
-        this.name = "profile" + n;
-        this.displayName = "Profile " + n + " thresholds";
-        this.metricName = new TextInput({ name: "metricName", displayName: "Metric name", value: metric, placeholder: "e.g. To Be Picked" });
-        this.low = new NumUpDown({ name: "low", displayName: "Low (minimum)", value: lo });
-        this.medium = new NumUpDown({ name: "medium", displayName: "Medium", value: med });
-        this.high = new NumUpDown({ name: "high", displayName: "High", value: hi });
-        this.critical = new NumUpDown({ name: "critical", displayName: "Critical", value: crit });
-        this.auto = new ToggleSwitch({ name: "auto", displayName: "Auto-scale to data", value: false });
-        this.slices = [this.metricName, this.low, this.medium, this.high, this.critical, this.auto];
-    }
 }
 
 class LayoutCard extends SimpleCard {
@@ -71,9 +47,6 @@ class LayoutCard extends SimpleCard {
 
 export class VisualFormattingSettingsModel extends Model {
     scaleCard = new ScaleCard();
-    profile1 = new ProfileCard(1, "Total Units", 0, 5, 10, 15);
-    profile2 = new ProfileCard(2, "To Be Picked", 0, 5, 10, 15);
-    profile3 = new ProfileCard(3, "To Be Filled", 0, 5, 10, 15);
     layoutCard = new LayoutCard();
-    cards = [this.scaleCard, this.profile1, this.profile2, this.profile3, this.layoutCard];
+    cards = [this.scaleCard, this.layoutCard];
 }
