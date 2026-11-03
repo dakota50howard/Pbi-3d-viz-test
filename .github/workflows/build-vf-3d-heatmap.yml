@@ -1,0 +1,29 @@
+name: Build VF 3D Heatmap
+
+on:
+  push:
+    paths:
+      - "vf-3d-heatmap/**"
+      - ".github/workflows/build-vf-3d-heatmap.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vf-3d-heatmap
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install
+        run: npm install --no-audit --no-fund
+      - name: Package visual
+        run: npm run package
+      - name: Upload .pbiviz
+        uses: actions/upload-artifact@v4
+        with:
+          name: vf-3d-heatmap-pbiviz
+          path: vf-3d-heatmap/dist/*.pbiviz
