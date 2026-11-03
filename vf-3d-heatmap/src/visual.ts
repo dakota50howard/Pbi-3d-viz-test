@@ -15,7 +15,7 @@ import VisualConstructorOptions = powerbi.extensibility.visual.VisualConstructor
 import DataView = powerbi.DataView;
 
 interface Tick { pos: number; label: string; }
-interface GroupLabel { key: string; sprite: THREE.Sprite; base: THREE.Vector3; }
+interface GroupLabel { sprite: THREE.Sprite; }
 interface Scale { low: number; med: number; high: number; crit: number; }
 type ViewKind = "plan" | "front" | "side" | "iso";
 
@@ -77,9 +77,6 @@ export class Visual implements IVisual {
     private groupNames: string[] = ["", "", ""];
     private labelPick = 0; // which grouping is labelled, -1 = off
     private groupLabels: GroupLabel[] = [];
-    private labelOffsets: Record<string, { x: number; z: number }> = {};
-    private canEdit = false;
-    private drag?: { label: GroupLabel; start: THREE.Vector3; from: { x: number; z: number } };
 
     private cubeSize = 0.85;
     private lvl = 1.4;
@@ -132,18 +129,12 @@ export class Visual implements IVisual {
         el.addEventListener("pointermove", (e) => this.onHover(e));
         el.addEventListener("pointerleave", () => this.tooltips.hide({ immediately: true, isTouchEvent: false }));
 
-        this.root.addEventListener("pointerdown", (e) => this.onLabelDown(e), true);
-        this.root.addEventListener("pointermove", (e) => this.onLabelMove(e), true);
-        this.root.addEventListener("pointerup", (e) => this.onLabelUp(e), true);
-
         this.selection.registerOnSelectCallback(() => { this.applyColors(); this.draw(); });
     }
 
     public update(options: VisualUpdateOptions): void {
         const dv = options.dataViews?.[0];
         this.settings = this.fmtService.populateFormattingSettingsModel(VisualFormattingSettingsModel, dv);
-        this.canEdit = ((options.viewMode as number) ?? 0) >= 1; // 1 = edit mode
-        this.loadOffsets(dv);
 
         const { width, height } = options.viewport;
         this.renderer.setSize(width, height);
@@ -277,12 +268,16 @@ export class Visual implements IVisual {
         const sc = this.settings.scaleCard;
         let low = sc.low.value, med = sc.medium.value, high = sc.high.value, crit = sc.critical.value;
         if (sc.auto.value) {
-            const vals = this.cells.map((c) => c.value).filter((v): v is number => v != null).sort((a, b) => a - b);
-            if (vals.length) {
-                const lo = vals[0];
-                let hi = vals[Math.min(vals.length - 1, Math.floor(vals.length * 0.95))];
-                if (hi <= lo) hi = lo + 1;
-                low = lo; med = lo + (hi - lo) / 3; high = lo + (2 * (hi - lo)) / 3; crit = hi;
+            // Whole numbers, and zero-value bins are left out of the maths so they don't drag the scale down.
+            const all = this.cells.map((c) => c.value).filter((v): v is number => v != null);
+            const pos = all.filter((v) => v > 0).sort((a, b) => a - b);
+            if (pos.length) {
+                const p95 = pos[Math.min(pos.length - 1, Math.floor(pos.length * 0.95))];
+                low = all.some((v) => v <= 0) ? 0 : Math.floor(pos[0]);
+                crit = Math.max(low + 3, Math.ceil(p95));
+                med = low + Math.max(1, Math.round((crit - low) / 3));
+                high = Math.max(med + 1, low + Math.round((2 * (crit - low)) / 3));
+                crit = Math.max(high + 1, crit);
             }
         }
         low = Math.max(0, low);
@@ -735,42 +730,24 @@ export class Visual implements IVisual {
             gt.textContent = "Group labels";
             this.viewEl.appendChild(gt);
 
-            const sel = document.createElement("select");
-            sel.className = "hm-select";
-            const off = document.createElement("option");
-            off.value = "-1";
-            off.textContent = "Off";
-            sel.appendChild(off);
-            for (const g of names) {
-                const o = document.createElement("option");
-                o.value = String(g.i);
-                o.textContent = g.n;
-                sel.appendChild(o);
-            }
-            sel.value = String(this.effectiveLabelField());
-            sel.addEventListener("change", () => {
-                this.labelPick = Number(sel.value);
-                this.buildGroupLabels();
-                this.draw();
-            });
-            this.viewEl.appendChild(sel);
-
-            if (this.canEdit) {
-                const hint = document.createElement("div");
-                hint.className = "hm-hint";
-                hint.textContent = "Drag a label to move it. Positions save with the report.";
-                this.viewEl.appendChild(hint);
-                const reset = document.createElement("button");
-                reset.className = "hm-btn";
-                reset.textContent = "Reset label positions";
-                reset.addEventListener("click", () => {
-                    this.labelOffsets = {};
-                    this.persistOffsets();
+            const opts = [{ n: "Off", i: -1 }, ...names];
+            const cur = this.effectiveLabelField();
+            const wrap = document.createElement("div");
+            wrap.className = "hm-opts";
+            for (const o of opts) {
+                const bt = document.createElement("button");
+                bt.textContent = o.n;
+                bt.className = o.i === cur ? "on" : "";
+                bt.addEventListener("click", () => {
+                    this.labelPick = o.i;
+                    wrap.querySelectorAll("button").forEach((x) => x.classList.remove("on"));
+                    bt.classList.add("on");
                     this.buildGroupLabels();
                     this.draw();
                 });
-                this.viewEl.appendChild(reset);
+                wrap.appendChild(bt);
             }
+            this.viewEl.appendChild(wrap);
         }
     }
 
@@ -779,21 +756,6 @@ export class Visual implements IVisual {
         if (this.labelPick === -1) return -1;
         if (this.labelPick >= 0 && this.groupNames[this.labelPick]) return this.labelPick;
         return this.groupNames.findIndex((n) => n !== "");
-    }
-
-    private loadOffsets(dv?: DataView): void {
-        try {
-            const raw = (dv?.metadata?.objects as any)?.labelData?.positions;
-            this.labelOffsets = typeof raw === "string" && raw ? JSON.parse(raw) : {};
-        } catch {
-            this.labelOffsets = {};
-        }
-    }
-
-    private persistOffsets(): void {
-        this.host.persistProperties({
-            merge: [{ objectName: "labelData", selector: null as any, properties: { positions: JSON.stringify(this.labelOffsets) } }],
-        });
     }
 
     private clearGroupLabels(): void {
@@ -854,17 +816,23 @@ export class Visual implements IVisual {
         const gi = this.effectiveLabelField();
         if (!lab.showLabels.value || gi < 0 || !this.cells.length) return;
 
+        type Agg = { sx: number; sy: number; n: number; top: number; crit: number; minX: number; maxX: number; minY: number; maxY: number };
         const crit = this.active.crit;
-        const groups = new Map<string, { sx: number; sy: number; n: number; top: number; crit: number }>();
+        const groups = new Map<string, Agg>();
         for (const c of this.cells) {
             const g = c.groups[gi];
             if (!g || !this.inLevel(c) || !this.matches(c)) continue;
             let a = groups.get(g);
-            if (!a) { a = { sx: 0, sy: 0, n: 0, top: -Infinity, crit: 0 }; groups.set(g, a); }
+            if (!a) {
+                a = { sx: 0, sy: 0, n: 0, top: -Infinity, crit: 0, minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+                groups.set(g, a);
+            }
             a.sx += c.px;
             a.sy += c.py;
             a.n++;
             a.top = Math.max(a.top, c.pz * this.lvl - this.cubeSize / 2 + c.bh);
+            a.minX = Math.min(a.minX, c.px); a.maxX = Math.max(a.maxX, c.px);
+            a.minY = Math.min(a.minY, c.py); a.maxY = Math.max(a.maxY, c.py);
             if (c.value != null && c.value >= crit) a.crit++;
         }
 
@@ -873,80 +841,27 @@ export class Visual implements IVisual {
         list.sort((a, b) => b[1].crit - a[1].crit || a[0].localeCompare(b[0], undefined, { numeric: true }));
         list = list.slice(0, 200); // keep the scene light
 
+        // Do the groups run along X or along Y? Neighbouring groups sit side by side across the other axis.
+        let spanX = 0, spanY = 0;
+        for (const [, a] of list) { spanX += a.maxX - a.minX; spanY += a.maxY - a.minY; }
+        const alongX = spanX >= spanY;
+        const perp = (a: Agg) => (alongX ? a.sy / a.n : a.sx / a.n);
+        list.sort((p, q) => perp(p[1]) - perp(q[1]));
+
+        const t = Math.min(100, Math.max(0, lab.alongGroup.value)) / 100;
+        const stagger = Math.max(0, lab.stagger.value);
         const span = Math.max(this.ext.x, this.ext.y, this.ext.z, 10);
         const k = (Math.max(0.8, span * 0.045) * Math.max(0.2, lab.labelSize.value)) / 80;
-        for (const [name, a] of list) {
+        list.forEach(([name, a], i) => {
             const sp = this.makeGroupLabel(name, lab.showCount.value ? `${a.crit} critical` : null, a.crit > 0, k);
-            const base = new THREE.Vector3(
-                a.sx / a.n + lab.nudgeX.value,
-                a.top + lab.nudgeUp.value + sp.scale.y / 2,
-                a.sy / a.n + lab.nudgeY.value
-            );
-            const key = this.groupNames[gi] + "|" + name;
-            const off = this.labelOffsets[key] ?? { x: 0, z: 0 };
-            sp.position.set(base.x + off.x, base.y, base.z + off.z);
+            const tier = i % 3; // alternate three heights so neighbours do not overlap
+            const x = (alongX ? a.minX + t * (a.maxX - a.minX) : a.sx / a.n) + lab.nudgeX.value;
+            const z = (alongX ? a.sy / a.n : a.minY + t * (a.maxY - a.minY)) + lab.nudgeY.value;
+            const y = a.top + lab.nudgeUp.value + sp.scale.y / 2 + tier * stagger * sp.scale.y;
+            sp.position.set(x, y, z);
             this.scene.add(sp);
-            this.groupLabels.push({ key, sprite: sp, base });
-        }
-    }
-
-    private pickLabel(e: PointerEvent): GroupLabel | null {
-        if (!this.groupLabels.length) return null;
-        const r = this.renderer.domElement.getBoundingClientRect();
-        const ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-        this.raycaster.setFromCamera(ndc, this.camera);
-        const hit = this.raycaster.intersectObjects(this.groupLabels.map((l) => l.sprite))[0];
-        return hit ? this.groupLabels.find((l) => l.sprite === hit.object) ?? null : null;
-    }
-
-    private planePoint(e: PointerEvent, y: number): THREE.Vector3 | null {
-        const r = this.renderer.domElement.getBoundingClientRect();
-        const ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-        this.raycaster.setFromCamera(ndc, this.camera);
-        const out = new THREE.Vector3();
-        return this.raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -y), out) ? out : null;
-    }
-
-    private onLabelDown(e: PointerEvent): void {
-        if (!this.canEdit || e.button !== 0 || e.target !== this.renderer.domElement) return;
-        const label = this.pickLabel(e);
-        if (!label) return;
-        const start = this.planePoint(e, label.sprite.position.y);
-        if (!start) return;
-        this.drag = { label, start, from: { ...(this.labelOffsets[label.key] ?? { x: 0, z: 0 }) } };
-        this.renderer.domElement.setPointerCapture(e.pointerId);
-        this.tooltips.hide({ immediately: true, isTouchEvent: false });
-        e.stopPropagation(); // keep the camera from orbiting
-        e.preventDefault();
-    }
-
-    private onLabelMove(e: PointerEvent): void {
-        if (this.drag) {
-            e.stopPropagation();
-            const d = this.drag;
-            const p = this.planePoint(e, d.label.sprite.position.y);
-            if (p) {
-                const off = { x: d.from.x + (p.x - d.start.x), z: d.from.z + (p.z - d.start.z) };
-                this.labelOffsets[d.label.key] = off;
-                d.label.sprite.position.set(d.label.base.x + off.x, d.label.base.y, d.label.base.z + off.z);
-                this.draw();
-            }
-            return;
-        }
-        if (this.canEdit && e.target === this.renderer.domElement && !e.buttons) {
-            this.renderer.domElement.style.cursor = this.pickLabel(e) ? "grab" : "";
-        }
-    }
-
-    private onLabelUp(e: PointerEvent): void {
-        if (!this.drag) return;
-        e.stopPropagation();
-        const key = this.drag.label.key;
-        const off = this.labelOffsets[key];
-        if (off) this.labelOffsets[key] = { x: Math.round(off.x * 100) / 100, z: Math.round(off.z * 100) / 100 };
-        this.drag = undefined;
-        try { this.renderer.domElement.releasePointerCapture(e.pointerId); } catch { /* already released */ }
-        this.persistOffsets();
+            this.groupLabels.push({ sprite: sp });
+        });
     }
 
     // ---------- interaction ----------

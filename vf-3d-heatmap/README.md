@@ -22,5 +22,5 @@ Filters (search + Dim/Hide), View (Plan / Front / Side / Reset), Levels shown (F
 ## Group labels
 Put a column such as Zone, Aisle or SKU type in a Grouping well. A label floats above each group showing its name and
 (optionally) how many bins are at or above the Critical threshold. Choose which grouping is shown from the View card.
-In edit mode, drag a label to move it; positions are saved with the report. The Group labels card has nudge settings,
-a count on/off switch, label size and "only label groups with critical bins".
+The Group labels card has position-along-group and stagger settings (to reduce clutter), nudge settings, a count on/off
+switch, label size and "only label groups with critical bins".

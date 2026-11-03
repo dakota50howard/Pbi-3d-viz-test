@@ -31,11 +31,13 @@ class LabelsCard extends SimpleCard {
     showCount = new ToggleSwitch({ name: "showCount", displayName: "Show critical bin count", value: true });
     onlyCritical = new ToggleSwitch({ name: "onlyCritical", displayName: "Only label groups with critical bins", value: false });
     labelSize = new NumUpDown({ name: "labelSize", displayName: "Label size (1 = default)", value: 1 });
+    alongGroup = new NumUpDown({ name: "alongGroup", displayName: "Position along group (0 start, 50 middle, 100 end)", value: 50 });
+    stagger = new NumUpDown({ name: "stagger", displayName: "Stagger neighbours (0 = off)", value: 1 });
     nudgeUp = new NumUpDown({ name: "nudgeUp", displayName: "Raise labels (cube units)", value: 1.5 });
     nudgeX = new NumUpDown({ name: "nudgeX", displayName: "Move labels along X", value: 0 });
     nudgeY = new NumUpDown({ name: "nudgeY", displayName: "Move labels along Y", value: 0 });
 
-    slices = [this.showLabels, this.showCount, this.onlyCritical, this.labelSize, this.nudgeUp, this.nudgeX, this.nudgeY];
+    slices = [this.showLabels, this.showCount, this.onlyCritical, this.labelSize, this.alongGroup, this.stagger, this.nudgeUp, this.nudgeX, this.nudgeY];
 }
 
 class LayoutCard extends SimpleCard {

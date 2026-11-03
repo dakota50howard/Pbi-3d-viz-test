@@ -337,14 +337,15 @@
           "type": {
             "numeric": true
           }
-        }
-      }
-    },
-    "labelData": {
-      "properties": {
-        "positions": {
+        },
+        "alongGroup": {
           "type": {
-            "text": true
+            "numeric": true
+          }
+        },
+        "stagger": {
+          "type": {
+            "numeric": true
           }
         }
       }
