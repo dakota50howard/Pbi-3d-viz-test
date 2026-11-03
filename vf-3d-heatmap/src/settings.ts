@@ -23,6 +23,21 @@ class ScaleCard extends SimpleCard {
         this.lowColor, this.mediumColor, this.highColor, this.criticalColor];
 }
 
+class LabelsCard extends SimpleCard {
+    name = "labels";
+    displayName = "Group labels";
+
+    showLabels = new ToggleSwitch({ name: "showLabels", displayName: "Show group labels", value: true });
+    showCount = new ToggleSwitch({ name: "showCount", displayName: "Show critical bin count", value: true });
+    onlyCritical = new ToggleSwitch({ name: "onlyCritical", displayName: "Only label groups with critical bins", value: false });
+    labelSize = new NumUpDown({ name: "labelSize", displayName: "Label size (1 = default)", value: 1 });
+    nudgeUp = new NumUpDown({ name: "nudgeUp", displayName: "Raise labels (cube units)", value: 1.5 });
+    nudgeX = new NumUpDown({ name: "nudgeX", displayName: "Move labels along X", value: 0 });
+    nudgeY = new NumUpDown({ name: "nudgeY", displayName: "Move labels along Y", value: 0 });
+
+    slices = [this.showLabels, this.showCount, this.onlyCritical, this.labelSize, this.nudgeUp, this.nudgeX, this.nudgeY];
+}
+
 class LayoutCard extends SimpleCard {
     name = "layout";
     displayName = "Layout";
@@ -47,6 +62,7 @@ class LayoutCard extends SimpleCard {
 
 export class VisualFormattingSettingsModel extends Model {
     scaleCard = new ScaleCard();
+    labelsCard = new LabelsCard();
     layoutCard = new LayoutCard();
-    cards = [this.scaleCard, this.layoutCard];
+    cards = [this.scaleCard, this.labelsCard, this.layoutCard];
 }

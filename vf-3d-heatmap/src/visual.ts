@@ -15,6 +15,7 @@ import VisualConstructorOptions = powerbi.extensibility.visual.VisualConstructor
 import DataView = powerbi.DataView;
 
 interface Tick { pos: number; label: string; }
+interface GroupLabel { key: string; sprite: THREE.Sprite; base: THREE.Vector3; }
 interface Scale { low: number; med: number; high: number; crit: number; }
 type ViewKind = "plan" | "front" | "side" | "iso";
 
@@ -25,6 +26,7 @@ interface Cell {
     len: number | null; wid: number | null; hei: number | null;
     bw: number; bd: number; bh: number;
     cats: string[];
+    groups: string[];
     tip: { displayName: string; value: string }[];
     id: ISelectionId;
 }
@@ -71,6 +73,13 @@ export class Visual implements IVisual {
     private catSel: string[] = ["", "", ""];
     private catExact: boolean[] = [false, false, false];
     private hideMode = false;
+
+    private groupNames: string[] = ["", "", ""];
+    private labelPick = 0; // which grouping is labelled, -1 = off
+    private groupLabels: GroupLabel[] = [];
+    private labelOffsets: Record<string, { x: number; z: number }> = {};
+    private canEdit = false;
+    private drag?: { label: GroupLabel; start: THREE.Vector3; from: { x: number; z: number } };
 
     private cubeSize = 0.85;
     private lvl = 1.4;
@@ -123,12 +132,18 @@ export class Visual implements IVisual {
         el.addEventListener("pointermove", (e) => this.onHover(e));
         el.addEventListener("pointerleave", () => this.tooltips.hide({ immediately: true, isTouchEvent: false }));
 
+        this.root.addEventListener("pointerdown", (e) => this.onLabelDown(e), true);
+        this.root.addEventListener("pointermove", (e) => this.onLabelMove(e), true);
+        this.root.addEventListener("pointerup", (e) => this.onLabelUp(e), true);
+
         this.selection.registerOnSelectCallback(() => { this.applyColors(); this.draw(); });
     }
 
     public update(options: VisualUpdateOptions): void {
         const dv = options.dataViews?.[0];
         this.settings = this.fmtService.populateFormattingSettingsModel(VisualFormattingSettingsModel, dv);
+        this.canEdit = ((options.viewMode as number) ?? 0) >= 1; // 1 = edit mode
+        this.loadOffsets(dv);
 
         const { width, height } = options.viewport;
         this.renderer.setSize(width, height);
@@ -154,6 +169,7 @@ export class Visual implements IVisual {
         const table = dv?.table;
         this.catNames = ["", "", ""];
         this.catOptions = [[], [], []];
+        this.groupNames = ["", "", ""];
         this.metricName = "";
         this.ticks = { x: [], y: [], z: [] };
         this.axisNames = ["", "", ""];
@@ -173,6 +189,8 @@ export class Visual implements IVisual {
                 .filter((v) => v !== "")
                 .sort((a, b) => a.localeCompare(b, undefined, { numeric: true })));
         this.catSel = this.catSel.map((v, k) => (this.catExact[k] && !this.catOptions[k].includes(v) ? "" : v));
+        const gC = ["group1", "group2", "group3"].map(idx);
+        this.groupNames = gC.map((c) => (c >= 0 ? cols[c].displayName : ""));
         if (xC < 0 || yC < 0) return [];
 
         this.valueName = vC >= 0 ? cols[vC].displayName : "Value";
@@ -239,12 +257,14 @@ export class Visual implements IVisual {
                 len: num(lC, r), wid: num(wC, r), hei: num(hC, r),
                 bw: 1, bd: 1, bh: 1,
                 cats: fC.map((c) => (c >= 0 && r[c] != null ? String(r[c]) : "")),
+                groups: gC.map((c) => (c >= 0 && r[c] != null ? String(r[c]) : "")),
                 tip: [
                     { displayName: cols[xC].displayName, value: fmt(r[xC]) },
                     { displayName: cols[yC].displayName, value: fmt(r[yC]) },
                     ...(zC >= 0 ? [{ displayName: cols[zC].displayName, value: fmt(r[zC]) }] : []),
                     ...(vC >= 0 ? [{ displayName: valueLabel, value: fmt(r[vC]) }] : []),
                     ...fC.filter((c) => c >= 0).map((c) => ({ displayName: cols[c].displayName, value: fmt(r[c]) })),
+                    ...gC.filter((c) => c >= 0).map((c) => ({ displayName: cols[c].displayName, value: fmt(r[c]) })),
                     ...tipCols.map((c) => ({ displayName: cols[c].displayName, value: fmt(r[c]) })),
                 ],
                 id: this.host.createSelectionIdBuilder().withTable(table, i).createSelectionId(),
@@ -287,6 +307,7 @@ export class Visual implements IVisual {
             this.floor = undefined;
         }
         this.clearLabels();
+        this.clearGroupLabels();
         if (!this.cells.length) return;
 
         const lay = this.settings.layoutCard;
@@ -332,6 +353,7 @@ export class Visual implements IVisual {
         }
 
         if (lay.showAxisLabels.value) this.buildLabels();
+        this.buildGroupLabels();
         this.applyColors();
 
         const dims = `${mx.toFixed(1)}x${my.toFixed(1)}x${mz.toFixed(1)}`;
@@ -542,6 +564,7 @@ export class Visual implements IVisual {
 
     private onFilterChange(): void {
         this.updateStatus();
+        this.buildGroupLabels();
         this.applyVisibility();
         this.applyColors();
         this.draw();
@@ -704,6 +727,226 @@ export class Visual implements IVisual {
             slider("From", () => this.lvlFrom, (v) => { this.lvlFrom = Math.min(v, this.lvlTo); });
             slider("To", () => this.lvlTo, (v) => { this.lvlTo = Math.max(v, this.lvlFrom); });
         }
+
+        const names = this.groupNames.map((n, i) => ({ n, i })).filter((g) => g.n !== "");
+        if (names.length) {
+            const gt = document.createElement("div");
+            gt.className = "hm-ltitle";
+            gt.textContent = "Group labels";
+            this.viewEl.appendChild(gt);
+
+            const sel = document.createElement("select");
+            sel.className = "hm-select";
+            const off = document.createElement("option");
+            off.value = "-1";
+            off.textContent = "Off";
+            sel.appendChild(off);
+            for (const g of names) {
+                const o = document.createElement("option");
+                o.value = String(g.i);
+                o.textContent = g.n;
+                sel.appendChild(o);
+            }
+            sel.value = String(this.effectiveLabelField());
+            sel.addEventListener("change", () => {
+                this.labelPick = Number(sel.value);
+                this.buildGroupLabels();
+                this.draw();
+            });
+            this.viewEl.appendChild(sel);
+
+            if (this.canEdit) {
+                const hint = document.createElement("div");
+                hint.className = "hm-hint";
+                hint.textContent = "Drag a label to move it. Positions save with the report.";
+                this.viewEl.appendChild(hint);
+                const reset = document.createElement("button");
+                reset.className = "hm-btn";
+                reset.textContent = "Reset label positions";
+                reset.addEventListener("click", () => {
+                    this.labelOffsets = {};
+                    this.persistOffsets();
+                    this.buildGroupLabels();
+                    this.draw();
+                });
+                this.viewEl.appendChild(reset);
+            }
+        }
+    }
+
+    // ---------- group labels ----------
+    private effectiveLabelField(): number {
+        if (this.labelPick === -1) return -1;
+        if (this.labelPick >= 0 && this.groupNames[this.labelPick]) return this.labelPick;
+        return this.groupNames.findIndex((n) => n !== "");
+    }
+
+    private loadOffsets(dv?: DataView): void {
+        try {
+            const raw = (dv?.metadata?.objects as any)?.labelData?.positions;
+            this.labelOffsets = typeof raw === "string" && raw ? JSON.parse(raw) : {};
+        } catch {
+            this.labelOffsets = {};
+        }
+    }
+
+    private persistOffsets(): void {
+        this.host.persistProperties({
+            merge: [{ objectName: "labelData", selector: null as any, properties: { positions: JSON.stringify(this.labelOffsets) } }],
+        });
+    }
+
+    private clearGroupLabels(): void {
+        for (const l of this.groupLabels) {
+            this.scene.remove(l.sprite);
+            l.sprite.material.map?.dispose();
+            l.sprite.material.dispose();
+        }
+        this.groupLabels = [];
+    }
+
+    private makeGroupLabel(name: string, sub: string | null, hot: boolean, k: number): THREE.Sprite {
+        const pad = 16, f1 = 40, f2 = 30, b = 3, r = 14;
+        const probe = document.createElement("canvas").getContext("2d")!;
+        probe.font = `700 ${f1}px "Segoe UI", sans-serif`;
+        let w = probe.measureText(name).width;
+        if (sub) {
+            probe.font = `600 ${f2}px "Segoe UI", sans-serif`;
+            w = Math.max(w, probe.measureText(sub).width);
+        }
+        const cw = Math.min(900, Math.ceil(w + pad * 2 + 8));
+        const ch = sub ? f1 + f2 + pad * 2 + 10 : f1 + pad * 2;
+        const cv = document.createElement("canvas");
+        cv.width = cw;
+        cv.height = ch;
+        const ctx = cv.getContext("2d")!;
+        ctx.beginPath();
+        ctx.moveTo(b + r, b);
+        ctx.arcTo(cw - b, b, cw - b, ch - b, r);
+        ctx.arcTo(cw - b, ch - b, b, ch - b, r);
+        ctx.arcTo(b, ch - b, b, b, r);
+        ctx.arcTo(b, b, cw - b, b, r);
+        ctx.closePath();
+        ctx.fillStyle = "rgba(255,255,255,0.95)";
+        ctx.fill();
+        ctx.lineWidth = b * 2;
+        ctx.strokeStyle = hot ? "#D61F2C" : "#3b6fb6";
+        ctx.stroke();
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = `700 ${f1}px "Segoe UI", sans-serif`;
+        ctx.fillStyle = "#1f2937";
+        ctx.fillText(name, cw / 2, pad + f1 / 2 + 2, cw - pad * 2);
+        if (sub) {
+            ctx.font = `600 ${f2}px "Segoe UI", sans-serif`;
+            ctx.fillStyle = hot ? "#D61F2C" : "#6b7280";
+            ctx.fillText(sub, cw / 2, pad + f1 + 10 + f2 / 2, cw - pad * 2);
+        }
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthTest: false }));
+        sp.scale.set(cw * k, ch * k, 1);
+        sp.renderOrder = 10;
+        return sp;
+    }
+
+    private buildGroupLabels(): void {
+        this.clearGroupLabels();
+        const lab = this.settings.labelsCard;
+        const gi = this.effectiveLabelField();
+        if (!lab.showLabels.value || gi < 0 || !this.cells.length) return;
+
+        const crit = this.active.crit;
+        const groups = new Map<string, { sx: number; sy: number; n: number; top: number; crit: number }>();
+        for (const c of this.cells) {
+            const g = c.groups[gi];
+            if (!g || !this.inLevel(c) || !this.matches(c)) continue;
+            let a = groups.get(g);
+            if (!a) { a = { sx: 0, sy: 0, n: 0, top: -Infinity, crit: 0 }; groups.set(g, a); }
+            a.sx += c.px;
+            a.sy += c.py;
+            a.n++;
+            a.top = Math.max(a.top, c.pz * this.lvl - this.cubeSize / 2 + c.bh);
+            if (c.value != null && c.value >= crit) a.crit++;
+        }
+
+        let list = Array.from(groups.entries());
+        if (lab.onlyCritical.value) list = list.filter(([, a]) => a.crit > 0);
+        list.sort((a, b) => b[1].crit - a[1].crit || a[0].localeCompare(b[0], undefined, { numeric: true }));
+        list = list.slice(0, 200); // keep the scene light
+
+        const span = Math.max(this.ext.x, this.ext.y, this.ext.z, 10);
+        const k = (Math.max(0.8, span * 0.045) * Math.max(0.2, lab.labelSize.value)) / 80;
+        for (const [name, a] of list) {
+            const sp = this.makeGroupLabel(name, lab.showCount.value ? `${a.crit} critical` : null, a.crit > 0, k);
+            const base = new THREE.Vector3(
+                a.sx / a.n + lab.nudgeX.value,
+                a.top + lab.nudgeUp.value + sp.scale.y / 2,
+                a.sy / a.n + lab.nudgeY.value
+            );
+            const key = this.groupNames[gi] + "|" + name;
+            const off = this.labelOffsets[key] ?? { x: 0, z: 0 };
+            sp.position.set(base.x + off.x, base.y, base.z + off.z);
+            this.scene.add(sp);
+            this.groupLabels.push({ key, sprite: sp, base });
+        }
+    }
+
+    private pickLabel(e: PointerEvent): GroupLabel | null {
+        if (!this.groupLabels.length) return null;
+        const r = this.renderer.domElement.getBoundingClientRect();
+        const ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+        this.raycaster.setFromCamera(ndc, this.camera);
+        const hit = this.raycaster.intersectObjects(this.groupLabels.map((l) => l.sprite))[0];
+        return hit ? this.groupLabels.find((l) => l.sprite === hit.object) ?? null : null;
+    }
+
+    private planePoint(e: PointerEvent, y: number): THREE.Vector3 | null {
+        const r = this.renderer.domElement.getBoundingClientRect();
+        const ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+        this.raycaster.setFromCamera(ndc, this.camera);
+        const out = new THREE.Vector3();
+        return this.raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -y), out) ? out : null;
+    }
+
+    private onLabelDown(e: PointerEvent): void {
+        if (!this.canEdit || e.button !== 0 || e.target !== this.renderer.domElement) return;
+        const label = this.pickLabel(e);
+        if (!label) return;
+        const start = this.planePoint(e, label.sprite.position.y);
+        if (!start) return;
+        this.drag = { label, start, from: { ...(this.labelOffsets[label.key] ?? { x: 0, z: 0 }) } };
+        this.renderer.domElement.setPointerCapture(e.pointerId);
+        this.tooltips.hide({ immediately: true, isTouchEvent: false });
+        e.stopPropagation(); // keep the camera from orbiting
+        e.preventDefault();
+    }
+
+    private onLabelMove(e: PointerEvent): void {
+        if (this.drag) {
+            e.stopPropagation();
+            const d = this.drag;
+            const p = this.planePoint(e, d.label.sprite.position.y);
+            if (p) {
+                const off = { x: d.from.x + (p.x - d.start.x), z: d.from.z + (p.z - d.start.z) };
+                this.labelOffsets[d.label.key] = off;
+                d.label.sprite.position.set(d.label.base.x + off.x, d.label.base.y, d.label.base.z + off.z);
+                this.draw();
+            }
+            return;
+        }
+        if (this.canEdit && e.target === this.renderer.domElement && !e.buttons) {
+            this.renderer.domElement.style.cursor = this.pickLabel(e) ? "grab" : "";
+        }
+    }
+
+    private onLabelUp(e: PointerEvent): void {
+        if (!this.drag) return;
+        e.stopPropagation();
+        const key = this.drag.label.key;
+        const off = this.labelOffsets[key];
+        if (off) this.labelOffsets[key] = { x: Math.round(off.x * 100) / 100, z: Math.round(off.z * 100) / 100 };
+        this.drag = undefined;
+        try { this.renderer.domElement.releasePointerCapture(e.pointerId); } catch { /* already released */ }
+        this.persistOffsets();
     }
 
     // ---------- interaction ----------
@@ -750,6 +993,7 @@ export class Visual implements IVisual {
 
     public destroy(): void {
         this.clearLabels();
+        this.clearGroupLabels();
         this.controls.dispose();
         this.renderer.dispose();
     }

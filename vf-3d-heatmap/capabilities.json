@@ -57,6 +57,21 @@
       "kind": "Grouping"
     },
     {
+      "name": "group1",
+      "displayName": "Grouping 1",
+      "kind": "Grouping"
+    },
+    {
+      "name": "group2",
+      "displayName": "Grouping 2",
+      "kind": "Grouping"
+    },
+    {
+      "name": "group3",
+      "displayName": "Grouping 3",
+      "kind": "Grouping"
+    },
+    {
       "name": "tooltips",
       "displayName": "Tooltips",
       "kind": "GroupingOrMeasure"
@@ -120,6 +135,21 @@
             {
               "for": {
                 "in": "filter3"
+              }
+            },
+            {
+              "for": {
+                "in": "group1"
+              }
+            },
+            {
+              "for": {
+                "in": "group2"
+              }
+            },
+            {
+              "for": {
+                "in": "group3"
               }
             },
             {
@@ -267,6 +297,54 @@
         "dimScale": {
           "type": {
             "numeric": true
+          }
+        }
+      }
+    },
+    "labels": {
+      "properties": {
+        "showLabels": {
+          "type": {
+            "bool": true
+          }
+        },
+        "showCount": {
+          "type": {
+            "bool": true
+          }
+        },
+        "onlyCritical": {
+          "type": {
+            "bool": true
+          }
+        },
+        "labelSize": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "nudgeUp": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "nudgeX": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "nudgeY": {
+          "type": {
+            "numeric": true
+          }
+        }
+      }
+    },
+    "labelData": {
+      "properties": {
+        "positions": {
+          "type": {
+            "text": true
           }
         }
       }
