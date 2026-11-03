@@ -1,0 +1,22 @@
+{
+  "visual": {
+    "name": "vf3dHeatmap",
+    "displayName": "VF 3D Heatmap",
+    "guid": "vf3dHeatmap7A1B2C3D4E5F6A7B",
+    "visualClassName": "Visual",
+    "version": "1.0.0.0",
+    "description": "3D warehouse heatmap: bins placed by X/Y/Z, sized by length/width/height, colored by a metric.",
+    "supportUrl": "https://example.com",
+    "gitHubUrl": ""
+  },
+  "apiVersion": "5.11.0",
+  "author": {
+    "name": "Your Name",
+    "email": "you@example.com"
+  },
+  "assets": {
+    "icon": "assets/icon.png"
+  },
+  "style": "style/visual.less",
+  "capabilities": "capabilities.json"
+}

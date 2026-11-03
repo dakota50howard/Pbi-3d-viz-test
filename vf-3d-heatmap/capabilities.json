@@ -1,0 +1,378 @@
+{
+  "privileges": [],
+  "dataRoles": [
+    {
+      "name": "x",
+      "displayName": "X (column)",
+      "kind": "Grouping"
+    },
+    {
+      "name": "y",
+      "displayName": "Y (row)",
+      "kind": "Grouping"
+    },
+    {
+      "name": "z",
+      "displayName": "Z (level)",
+      "kind": "Grouping"
+    },
+    {
+      "name": "value",
+      "displayName": "Value (e.g. Selected Value)",
+      "kind": "Measure"
+    },
+    {
+      "name": "metric",
+      "displayName": "Metric name (for color profiles)",
+      "kind": "GroupingOrMeasure"
+    },
+    {
+      "name": "length",
+      "displayName": "Bin length (X)",
+      "kind": "GroupingOrMeasure"
+    },
+    {
+      "name": "width",
+      "displayName": "Bin width (Y)",
+      "kind": "GroupingOrMeasure"
+    },
+    {
+      "name": "height",
+      "displayName": "Bin height (Z)",
+      "kind": "GroupingOrMeasure"
+    },
+    {
+      "name": "filter1",
+      "displayName": "Category Filter 1",
+      "kind": "Grouping"
+    },
+    {
+      "name": "filter2",
+      "displayName": "Category Filter 2",
+      "kind": "Grouping"
+    },
+    {
+      "name": "filter3",
+      "displayName": "Category Filter 3",
+      "kind": "Grouping"
+    },
+    {
+      "name": "tooltips",
+      "displayName": "Tooltips",
+      "kind": "GroupingOrMeasure"
+    }
+  ],
+  "dataViewMappings": [
+    {
+      "table": {
+        "rows": {
+          "select": [
+            {
+              "for": {
+                "in": "x"
+              }
+            },
+            {
+              "for": {
+                "in": "y"
+              }
+            },
+            {
+              "for": {
+                "in": "z"
+              }
+            },
+            {
+              "for": {
+                "in": "value"
+              }
+            },
+            {
+              "for": {
+                "in": "metric"
+              }
+            },
+            {
+              "for": {
+                "in": "length"
+              }
+            },
+            {
+              "for": {
+                "in": "width"
+              }
+            },
+            {
+              "for": {
+                "in": "height"
+              }
+            },
+            {
+              "for": {
+                "in": "filter1"
+              }
+            },
+            {
+              "for": {
+                "in": "filter2"
+              }
+            },
+            {
+              "for": {
+                "in": "filter3"
+              }
+            },
+            {
+              "for": {
+                "in": "tooltips"
+              }
+            }
+          ],
+          "dataReductionAlgorithm": {
+            "top": {
+              "count": 30000
+            }
+          }
+        }
+      }
+    }
+  ],
+  "tooltips": {
+    "supportedTypes": {
+      "default": true,
+      "canvas": true
+    },
+    "roles": [
+      "tooltips"
+    ]
+  },
+  "objects": {
+    "scale": {
+      "properties": {
+        "low": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "medium": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "high": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "critical": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "auto": {
+          "type": {
+            "bool": true
+          }
+        },
+        "lowColor": {
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        },
+        "mediumColor": {
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        },
+        "highColor": {
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        },
+        "criticalColor": {
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "profile1": {
+      "properties": {
+        "metricName": {
+          "type": {
+            "text": true
+          }
+        },
+        "low": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "medium": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "high": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "critical": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "auto": {
+          "type": {
+            "bool": true
+          }
+        }
+      }
+    },
+    "profile2": {
+      "properties": {
+        "metricName": {
+          "type": {
+            "text": true
+          }
+        },
+        "low": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "medium": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "high": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "critical": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "auto": {
+          "type": {
+            "bool": true
+          }
+        }
+      }
+    },
+    "profile3": {
+      "properties": {
+        "metricName": {
+          "type": {
+            "text": true
+          }
+        },
+        "low": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "medium": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "high": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "critical": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "auto": {
+          "type": {
+            "bool": true
+          }
+        }
+      }
+    },
+    "layout": {
+      "properties": {
+        "cubeSize": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "levelSpacing": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "showFloor": {
+          "type": {
+            "bool": true
+          }
+        },
+        "showLegend": {
+          "type": {
+            "bool": true
+          }
+        },
+        "showAxisLabels": {
+          "type": {
+            "bool": true
+          }
+        },
+        "trueCoords": {
+          "type": {
+            "bool": true
+          }
+        },
+        "xScale": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "yScale": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "zScale": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "useBinDims": {
+          "type": {
+            "bool": true
+          }
+        },
+        "dimScale": {
+          "type": {
+            "numeric": true
+          }
+        }
+      }
+    }
+  },
+  "supportsMultiVisualSelection": true
+}
