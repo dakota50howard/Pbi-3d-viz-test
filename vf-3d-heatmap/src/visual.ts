@@ -28,7 +28,8 @@ interface Cell {
     cats: string[];
     groups: string[];
     tip: { displayName: string; value: string }[];
-    id: ISelectionId;
+    row: number;
+    id?: ISelectionId;
 }
 
 const fmtNum = (n: number): string => String(Math.round(n * 1000) / 1000);
@@ -46,6 +47,9 @@ export class Visual implements IVisual {
     private panelEl: HTMLElement;
     private viewEl: HTMLElement;
     private statusEl?: HTMLElement;
+    private table?: powerbi.DataViewTable;
+    private truncated = false;
+    private emptyText = "Add X, Y and Value fields to see the 3D heatmap.";
     private renderer: THREE.WebGLRenderer;
     private scene = new THREE.Scene();
     private camera = new THREE.PerspectiveCamera(45, 1, 0.1, 5000);
@@ -108,7 +112,7 @@ export class Visual implements IVisual {
 
         this.emptyMsg = document.createElement("div");
         this.emptyMsg.className = "hm-empty";
-        this.emptyMsg.textContent = "Add X, Y and Value fields to see the 3D heatmap.";
+        this.emptyMsg.textContent = this.emptyText;
         this.root.appendChild(this.emptyMsg);
 
         this.legendEl = document.createElement("div");
@@ -141,6 +145,20 @@ export class Visual implements IVisual {
         this.camera.aspect = width / Math.max(height, 1);
         this.camera.updateProjectionMatrix();
 
+        // Power BI hands over 30,000 rows at a time. Keep asking for more until everything is loaded (or the cap is hit).
+        const MAX_ROWS = 100000;
+        const loaded = dv?.table?.rows?.length ?? 0;
+        this.truncated = false;
+        if (dv?.metadata?.segment) {
+            if (loaded < MAX_ROWS && this.host.fetchMoreData(true)) {
+                this.emptyMsg.textContent = `Loading bins... ${loaded.toLocaleString()} so far`;
+                this.emptyMsg.style.display = "flex";
+                return;
+            }
+            this.truncated = loaded >= MAX_ROWS;
+        }
+        this.emptyMsg.textContent = this.emptyText;
+
         this.cells = this.parse(dv);
         this.resolveScale();
         this.emptyMsg.style.display = this.cells.length ? "none" : "flex";
@@ -156,8 +174,14 @@ export class Visual implements IVisual {
     }
 
     // ---------- data ----------
+    private idFor(c: Cell): ISelectionId {
+        if (!c.id) c.id = this.host.createSelectionIdBuilder().withTable(this.table!, c.row).createSelectionId();
+        return c.id;
+    }
+
     private parse(dv?: DataView): Cell[] {
         const table = dv?.table;
+        this.table = table;
         this.catNames = ["", "", ""];
         this.catOptions = [[], [], []];
         this.groupNames = ["", "", ""];
@@ -258,7 +282,7 @@ export class Visual implements IVisual {
                     ...gC.filter((c) => c >= 0).map((c) => ({ displayName: cols[c].displayName, value: fmt(r[c]) })),
                     ...tipCols.map((c) => ({ displayName: cols[c].displayName, value: fmt(r[c]) })),
                 ],
-                id: this.host.createSelectionIdBuilder().withTable(table, i).createSelectionId(),
+                row: i,
             } as Cell;
         });
     }
@@ -472,7 +496,7 @@ export class Visual implements IVisual {
         const dim = new THREE.Color(0xd5d8dc);
         this.cells.forEach((c, i) => {
             const col = this.colorFor(c.value);
-            if ((picked.length && !picked.some((p) => p.equals(c.id))) || !this.matches(c)) col.lerp(dim, 0.8);
+            if ((picked.length && !picked.some((p) => p.equals(this.idFor(c)))) || !this.matches(c)) col.lerp(dim, 0.8);
             this.mesh!.setColorAt(i, col);
         });
         if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
@@ -505,6 +529,8 @@ export class Visual implements IVisual {
         const ends = add(this.legendEl, "hm-ends");
         add(ends, "", fmtNum(a.low));
         add(ends, "", fmtNum(a.crit));
+
+        if (this.truncated) add(this.legendEl, "hm-ends", `Showing the first ${this.cells.length.toLocaleString()} bins (limit reached)`);
 
         const details = add(this.legendEl, "hm-details");
         for (const [label, v, c] of stops) {
@@ -888,7 +914,7 @@ export class Visual implements IVisual {
                 coordinates: [e.clientX, e.clientY],
                 isTouchEvent: false,
                 dataItems: c.tip,
-                identities: [c.id],
+                identities: [this.idFor(c)],
             });
         });
     }
@@ -897,7 +923,7 @@ export class Visual implements IVisual {
         if (Math.hypot(e.clientX - this.downPos.x, e.clientY - this.downPos.y) > 4) return; // was a drag
         const i = this.pick(e);
         if (i == null) this.selection.clear();
-        else this.selection.select(this.cells[i].id, e.ctrlKey || e.metaKey);
+        else this.selection.select(this.idFor(this.cells[i]), e.ctrlKey || e.metaKey);
         this.applyColors();
         this.draw();
     }
