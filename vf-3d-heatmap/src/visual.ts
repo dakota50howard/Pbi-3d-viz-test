@@ -47,6 +47,29 @@ export class Visual implements IVisual {
     private panelEl: HTMLElement;
     private viewEl: HTMLElement;
     private statusEl?: HTMLElement;
+
+    // walk mode
+    private crossEl: HTMLElement;
+    private hudEl: HTMLElement;
+    private secretEl: HTMLElement;
+    private walking = false;
+    private keys = new Set<string>();
+    private yaw = 0;
+    private pitch = 0;
+    private wx = 0;
+    private wz = 0;
+    private eyeY = 1.8;
+    private walkTop = 2;
+    private walkR = 0.3;
+    private walkSpeed = 8;
+    private saved?: { pos: THREE.Vector3; target: THREE.Vector3; fov: number; near: number };
+    private grid = new Map<number, number[]>();
+    private dragLook = false;
+    private hadLock = false;
+    private lastT = 0;
+    private lastTip = -1;
+    private tipClock = 0;
+    private hudTimer = 0;
     private table?: powerbi.DataViewTable;
     private truncated = false;
     private emptyText = "Add X, Y and Value fields to see the 3D heatmap.";
@@ -126,6 +149,28 @@ export class Visual implements IVisual {
         this.viewEl = document.createElement("div");
         this.viewEl.className = "hm-view";
         this.root.appendChild(this.viewEl);
+
+        this.root.tabIndex = -1;
+        this.crossEl = document.createElement("div");
+        this.crossEl.className = "hm-cross";
+        this.root.appendChild(this.crossEl);
+
+        this.hudEl = document.createElement("div");
+        this.hudEl.className = "hm-hud";
+        this.root.appendChild(this.hudEl);
+
+        // Hidden button, bottom-right corner: a very faint dot that shows up when you hover it.
+        this.secretEl = document.createElement("button");
+        this.secretEl.className = "hm-secret";
+        this.secretEl.title = "Walk mode";
+        this.secretEl.addEventListener("click", () => this.enterWalk());
+        this.root.appendChild(this.secretEl);
+
+        window.addEventListener("keydown", this.onKeyDown);
+        window.addEventListener("keyup", this.onKeyUp);
+        window.addEventListener("blur", () => this.keys.clear());
+        this.root.ownerDocument.addEventListener("pointerlockchange", this.onLockChange);
+        this.root.ownerDocument.addEventListener("pointerlockerror", () => this.setLookFallback());
 
         const el = this.renderer.domElement;
         el.addEventListener("pointerdown", (e) => { this.downPos = { x: e.clientX, y: e.clientY }; });
@@ -442,6 +487,7 @@ export class Visual implements IVisual {
 
     // ---------- camera views ----------
     private setView(kind: ViewKind): void {
+        if (this.walking) return;
         if (!this.cells.length) return;
         const { x, y, z } = this.ext;
         const cx = x / 2, cy = z / 2, cz = y / 2;
@@ -574,6 +620,7 @@ export class Visual implements IVisual {
         });
         this.mesh.instanceMatrix.needsUpdate = true;
         this.mesh.boundingSphere = null; // recompute for picking
+        if (this.walking) this.buildCollision();
     }
 
     private updateStatus(): void {
@@ -890,6 +937,220 @@ export class Visual implements IVisual {
         });
     }
 
+    // ---------- walk mode ----------
+    private gkey(ix: number, iz: number): number {
+        return (ix + 2048) * 4096 + (iz + 2048);
+    }
+
+    // Spatial hash of the bins you can bump into, so collision stays fast with huge warehouses.
+    private buildCollision(): void {
+        this.grid.clear();
+        const G = 2;
+        this.cells.forEach((c, i) => {
+            if (this.isHidden(c)) return;
+            const x0 = Math.floor((c.px - c.bw / 2) / G), x1 = Math.floor((c.px + c.bw / 2) / G);
+            const z0 = Math.floor((c.py - c.bd / 2) / G), z1 = Math.floor((c.py + c.bd / 2) / G);
+            for (let ix = x0; ix <= x1; ix++) {
+                for (let iz = z0; iz <= z1; iz++) {
+                    const k = this.gkey(ix, iz);
+                    const l = this.grid.get(k);
+                    if (l) l.push(i); else this.grid.set(k, [i]);
+                }
+            }
+        });
+    }
+
+    private blocked(x: number, z: number): boolean {
+        const G = 2, r = this.walkR;
+        for (let ix = Math.floor((x - r) / G); ix <= Math.floor((x + r) / G); ix++) {
+            for (let iz = Math.floor((z - r) / G); iz <= Math.floor((z + r) / G); iz++) {
+                const list = this.grid.get(this.gkey(ix, iz));
+                if (!list) continue;
+                for (const i of list) {
+                    const c = this.cells[i];
+                    if (c.pz * this.lvl - this.cubeSize / 2 >= this.walkTop) continue; // overhead, walk underneath
+                    if (Math.abs(x - c.px) < c.bw / 2 + r && Math.abs(z - c.py) < c.bd / 2 + r) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private enterWalk(): void {
+        if (this.walking || !this.cells.length) return;
+        this.saved = {
+            pos: this.camera.position.clone(),
+            target: this.controls.target.clone(),
+            fov: this.camera.fov,
+            near: this.camera.near,
+        };
+        this.walking = true;
+        this.controls.enabled = false;
+        this.root.classList.add("walking");
+        this.tooltips.hide({ immediately: true, isTouchEvent: false });
+
+        const floorY = -this.cubeSize / 2;
+        this.eyeY = floorY + Math.max(1.2, this.lvl * 1.3);
+        this.walkTop = this.eyeY + 0.1;
+        this.walkR = Math.max(0.22, this.cubeSize * 0.3);
+        const span = Math.max(this.ext.x, this.ext.y, 10);
+        this.walkSpeed = Math.min(25, Math.max(4, span * 0.08));
+        this.buildCollision();
+
+        this.wx = this.ext.x / 2;
+        this.wz = this.ext.y + 1.5;
+        for (let g = 0; g < 200 && this.blocked(this.wx, this.wz); g++) this.wz += 0.5;
+        this.yaw = 0;
+        this.pitch = 0;
+        this.keys.clear();
+        this.lastTip = -1;
+        this.hadLock = false;
+        this.dragLook = false;
+
+        this.camera.fov = 70;
+        this.camera.near = 0.05;
+        this.camera.rotation.order = "YXZ";
+        this.camera.updateProjectionMatrix();
+
+        this.showHud("W A S D to walk · move the mouse to look · Esc to exit");
+        const el = this.renderer.domElement;
+        try {
+            const r: any = (el as any).requestPointerLock();
+            if (r && typeof r.catch === "function") r.catch(() => this.setLookFallback());
+        } catch {
+            this.setLookFallback();
+        }
+        setTimeout(() => {
+            if (this.walking && this.root.ownerDocument.pointerLockElement !== el) this.setLookFallback();
+        }, 700);
+
+        this.root.focus();
+        this.lastT = performance.now();
+        requestAnimationFrame(this.walkLoop);
+    }
+
+    private exitWalk(): void {
+        if (!this.walking) return;
+        this.walking = false;
+        const doc = this.root.ownerDocument;
+        if (doc.pointerLockElement === this.renderer.domElement) doc.exitPointerLock();
+        this.controls.enabled = true;
+        this.root.classList.remove("walking");
+        this.renderer.domElement.style.cursor = "";
+        this.tooltips.hide({ immediately: true, isTouchEvent: false });
+        this.grid.clear();
+        window.clearTimeout(this.hudTimer);
+        if (this.saved) {
+            this.camera.fov = this.saved.fov;
+            this.camera.near = this.saved.near;
+            this.camera.rotation.order = "XYZ";
+            this.camera.position.copy(this.saved.pos);
+            this.controls.target.copy(this.saved.target);
+            this.camera.updateProjectionMatrix();
+            this.controls.update();
+        }
+        this.hadLock = false;
+        this.draw();
+    }
+
+    private setLookFallback(): void {
+        if (!this.walking || this.root.ownerDocument.pointerLockElement === this.renderer.domElement) return;
+        this.dragLook = true;
+        this.renderer.domElement.style.cursor = "grab";
+        this.showHud("W A S D to walk · hold the mouse button and drag to look · Esc to exit");
+    }
+
+    private showHud(text: string): void {
+        this.hudEl.textContent = text;
+        this.hudEl.classList.remove("fade");
+        window.clearTimeout(this.hudTimer);
+        this.hudTimer = window.setTimeout(() => this.hudEl.classList.add("fade"), 7000);
+    }
+
+    private walkLook(e: PointerEvent): void {
+        const locked = this.root.ownerDocument.pointerLockElement === this.renderer.domElement;
+        if (!locked && !(this.dragLook && (e.buttons & 1))) return;
+        this.yaw -= e.movementX * 0.0022;
+        this.pitch = Math.max(-1.4, Math.min(1.4, this.pitch - e.movementY * 0.0022));
+    }
+
+    private onLockChange = (): void => {
+        const locked = this.root.ownerDocument.pointerLockElement === this.renderer.domElement;
+        if (locked) { this.hadLock = true; this.dragLook = false; this.renderer.domElement.style.cursor = ""; }
+        else if (this.walking && this.hadLock) this.exitWalk(); // Esc releases the mouse and leaves walk mode
+    };
+
+    private onKeyDown = (e: KeyboardEvent): void => {
+        if (!this.walking) return;
+        if (e.code === "Escape") { this.exitWalk(); return; }
+        if (["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) {
+            this.keys.add(e.code);
+            e.preventDefault();
+        }
+    };
+
+    private onKeyUp = (e: KeyboardEvent): void => { this.keys.delete(e.code); };
+
+    private pickCenter(): number | null {
+        if (!this.mesh) return null;
+        this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+        const prevFar = this.raycaster.far;
+        this.raycaster.far = 30;
+        const hit = this.raycaster.intersectObject(this.mesh)[0];
+        this.raycaster.far = prevFar;
+        const id = hit?.instanceId ?? null;
+        if (id != null && this.isHidden(this.cells[id])) return null;
+        return id;
+    }
+
+    private walkLoop = (t: number): void => {
+        if (!this.walking) return;
+        const dt = Math.min(0.05, Math.max(0, (t - this.lastT) / 1000));
+        this.lastT = t;
+
+        const k = this.keys;
+        const f = (k.has("KeyW") || k.has("ArrowUp") ? 1 : 0) - (k.has("KeyS") || k.has("ArrowDown") ? 1 : 0);
+        const sd = (k.has("KeyD") || k.has("ArrowRight") ? 1 : 0) - (k.has("KeyA") || k.has("ArrowLeft") ? 1 : 0);
+        if (f || sd) {
+            const len = Math.hypot(f, sd);
+            const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
+            const step = this.walkSpeed * dt;
+            const mx = (-sy * (f / len) + cy * (sd / len)) * step;
+            const mz = (-cy * (f / len) - sy * (sd / len)) * step;
+            // move one axis at a time so you slide along racks instead of sticking to them
+            if (!this.blocked(this.wx + mx, this.wz)) this.wx += mx;
+            if (!this.blocked(this.wx, this.wz + mz)) this.wz += mz;
+            this.wx = Math.min(this.ext.x + 1.6, Math.max(-1.6, this.wx));
+            this.wz = Math.min(this.ext.y + 1.6, Math.max(-1.6, this.wz));
+        }
+
+        this.camera.position.set(this.wx, this.eyeY, this.wz);
+        this.camera.rotation.set(this.pitch, this.yaw, 0);
+        this.draw();
+
+        if (t - this.tipClock > 180) {
+            this.tipClock = t;
+            const i = this.pickCenter();
+            const idx = i ?? -1;
+            if (idx !== this.lastTip) {
+                this.lastTip = idx;
+                if (i == null) {
+                    this.tooltips.hide({ immediately: true, isTouchEvent: false });
+                } else {
+                    const c = this.cells[i];
+                    const r = this.renderer.domElement.getBoundingClientRect();
+                    this.tooltips.show({
+                        coordinates: [r.left + r.width / 2 + 16, r.top + r.height / 2 + 16],
+                        isTouchEvent: false,
+                        dataItems: c.tip,
+                        identities: [this.idFor(c)],
+                    });
+                }
+            }
+        }
+        requestAnimationFrame(this.walkLoop);
+    };
+
     // ---------- interaction ----------
     private pick(e: PointerEvent): number | null {
         if (!this.mesh) return null;
@@ -903,6 +1164,7 @@ export class Visual implements IVisual {
     }
 
     private onHover(e: PointerEvent): void {
+        if (this.walking) { this.walkLook(e); return; }
         if (e.buttons || this.hoverQueued) return;
         this.hoverQueued = true;
         requestAnimationFrame(() => {
@@ -920,6 +1182,7 @@ export class Visual implements IVisual {
     }
 
     private onClick(e: PointerEvent): void {
+        if (this.walking) return;
         if (Math.hypot(e.clientX - this.downPos.x, e.clientY - this.downPos.y) > 4) return; // was a drag
         const i = this.pick(e);
         if (i == null) this.selection.clear();
@@ -933,6 +1196,10 @@ export class Visual implements IVisual {
     }
 
     public destroy(): void {
+        this.exitWalk();
+        window.removeEventListener("keydown", this.onKeyDown);
+        window.removeEventListener("keyup", this.onKeyUp);
+        this.root.ownerDocument.removeEventListener("pointerlockchange", this.onLockChange);
         this.clearLabels();
         this.clearGroupLabels();
         this.controls.dispose();
