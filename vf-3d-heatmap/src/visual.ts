@@ -47,6 +47,7 @@ export class Visual implements IVisual {
     private panelEl: HTMLElement;
     private viewEl: HTMLElement;
     private statusEl?: HTMLElement;
+    private groupColors = new Map<string, THREE.Color>();
     private table?: powerbi.DataViewTable;
     private truncated = false;
     private emptyText = "Add X, Y and Value fields to see the 3D heatmap.";
@@ -167,6 +168,7 @@ export class Visual implements IVisual {
 
         this.cells = this.parse(dv);
         this.resolveScale();
+        this.parseGroupColors();
         this.emptyMsg.style.display = this.cells.length ? "none" : "flex";
         this.build();
         this.buildFilterPanel();
@@ -500,12 +502,41 @@ export class Visual implements IVisual {
         return stops[3].c.clone();
     }
 
+    // ---------- color the whole group ----------
+    private colorByGroup(): boolean {
+        return this.settings.labelsCard.colorGroups.value && this.effectiveLabelField() >= 0;
+    }
+
+    private parseGroupColors(): void {
+        this.groupColors.clear();
+        const raw = this.settings.labelsCard.groupColorList.value || "";
+        for (const part of raw.split(/[;\n]+/)) {
+            const eq = part.lastIndexOf("=");
+            if (eq < 1) continue;
+            const name = part.slice(0, eq).trim().toLowerCase();
+            let col = part.slice(eq + 1).trim().toLowerCase();
+            if (!name || !col) continue;
+            if (/^[0-9a-f]{3}$|^[0-9a-f]{6}$/.test(col)) col = "#" + col;
+            if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/.test(col)) this.groupColors.set(name, new THREE.Color(col));
+            else if (THREE.Color.NAMES[col] !== undefined) this.groupColors.set(name, new THREE.Color(THREE.Color.NAMES[col]));
+        }
+    }
+
+    private groupColorFor(c: Cell): THREE.Color | null {
+        const gi = this.effectiveLabelField();
+        const g = gi >= 0 ? c.groups[gi] : "";
+        const hit = g ? this.groupColors.get(g.trim().toLowerCase()) : undefined;
+        if (hit) return hit.clone();
+        return this.settings.labelsCard.unlistedHeat.value ? null : new THREE.Color(0xb8bec6);
+    }
+
     private applyColors(): void {
         if (!this.mesh) return;
         const picked = this.selection.getSelectionIds() as ISelectionId[];
         const dim = new THREE.Color(0xd5d8dc);
+        const byGroup = this.colorByGroup();
         this.cells.forEach((c, i) => {
-            const col = this.colorFor(c.value);
+            const col = (byGroup ? this.groupColorFor(c) : null) ?? this.colorFor(c.value);
             if ((picked.length && !picked.some((p) => p.equals(this.idFor(c)))) || !this.matches(c)) col.lerp(dim, 0.8);
             this.mesh!.setColorAt(i, col);
         });
@@ -531,6 +562,29 @@ export class Visual implements IVisual {
             parent.appendChild(d);
             return d;
         };
+        if (this.colorByGroup()) {
+            const gi = this.effectiveLabelField();
+            add(this.legendEl, "hm-title", this.groupNames[gi] || "Groups");
+            const seen = new Map<string, number>();
+            for (const c of this.cells) {
+                const g = c.groups[gi];
+                if (g) seen.set(g, (seen.get(g) ?? 0) + 1);
+            }
+            const names = Array.from(seen.keys()).sort((p, q) => p.localeCompare(q, undefined, { numeric: true }));
+            const box = add(this.legendEl, "hm-details");
+            names.slice(0, 16).forEach((n) => {
+                const row = add(box, "hm-row");
+                const left = add(row, "");
+                const sw = document.createElement("span");
+                sw.className = "hm-swatch";
+                const gc = this.groupColors.get(n.trim().toLowerCase());
+                sw.style.background = gc ? "#" + gc.getHexString() : (this.settings.labelsCard.unlistedHeat.value ? "linear-gradient(90deg,#22A850,#F5D90A,#D61F2C)" : "#b8bec6");
+                left.appendChild(sw);
+                left.appendChild(document.createTextNode(n));
+            });
+            if (names.length > 16) add(box, "hm-ends", `+${names.length - 16} more groups`);
+            return;
+        }
         add(this.legendEl, "hm-title", this.metricName || this.valueName);
         const range = (a.crit - a.low) || 1;
         const bar = add(this.legendEl, "hm-bar");
@@ -779,6 +833,8 @@ export class Visual implements IVisual {
                     wrap.querySelectorAll("button").forEach((x) => x.classList.remove("on"));
                     bt.classList.add("on");
                     this.buildGroupLabels();
+                    this.applyColors();
+                    this.buildLegend();
                     this.draw();
                 });
                 wrap.appendChild(bt);
@@ -850,7 +906,7 @@ export class Visual implements IVisual {
         this.clearGroupLabels();
         const lab = this.settings.labelsCard;
         const gi = this.effectiveLabelField();
-        if (!lab.showLabels.value || gi < 0 || !this.cells.length) return;
+        if (!lab.showLabels.value || gi < 0 || !this.cells.length || lab.colorGroups.value) return;
 
         type Agg = { sx: number; sy: number; n: number; top: number; crit: number; minX: number; maxX: number; minY: number; maxY: number };
         const crit = this.active.crit;

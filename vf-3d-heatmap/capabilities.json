@@ -362,6 +362,21 @@
           "type": {
             "numeric": true
           }
+        },
+        "colorGroups": {
+          "type": {
+            "bool": true
+          }
+        },
+        "groupColorList": {
+          "type": {
+            "text": true
+          }
+        },
+        "unlistedHeat": {
+          "type": {
+            "bool": true
+          }
         }
       }
     },
