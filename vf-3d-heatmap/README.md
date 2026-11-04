@@ -34,3 +34,5 @@ Group labels > "Color whole groups instead of label cards" colors every bin by i
 card) and hides the label cards. List colors in the "Group colors" box, one per line, as `name=color` (hex like #E63946
 or a color name like blue). Any number of groups. Groups not listed keep heat colors, or turn gray if you switch that off.
 The legend lists the groups it found so you know the exact names to type.
+
+The View card's Group labels section has a Cards / Colors switch for viewers. The format pane setting is the default they see first.
