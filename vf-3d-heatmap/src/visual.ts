@@ -316,14 +316,14 @@ export class Visual implements IVisual {
             const pos = all.filter((v) => v > 0).sort((a, b) => a - b);
             if (pos.length) {
                 const p95 = pos[Math.min(pos.length - 1, Math.floor(pos.length * 0.95))];
-                low = all.some((v) => v <= 0) ? 0 : Math.floor(pos[0]);
+                low = Math.max(1, Math.floor(pos[0]));
                 crit = Math.max(low + 3, Math.ceil(p95));
                 med = low + Math.max(1, Math.round((crit - low) / 3));
                 high = Math.max(med + 1, low + Math.round((2 * (crit - low)) / 3));
                 crit = Math.max(high + 1, crit);
             }
         }
-        low = Math.max(0, low);
+        low = Math.max(1, low); // 0 is the Empty level
         med = Math.max(low, med);
         high = Math.max(med, high);
         crit = Math.max(high, crit);
@@ -583,7 +583,7 @@ export class Visual implements IVisual {
         const s = this.settings.scaleCard;
         const a = this.active;
         const stops: [string, number, string][] = [
-            ["Low · minimum", a.low, s.lowColor.value.value],
+            ["Low", a.low, s.lowColor.value.value],
             ["Medium", a.med, s.mediumColor.value.value],
             ["High", a.high, s.highColor.value.value],
             ["Critical", a.crit, s.criticalColor.value.value],

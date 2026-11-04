@@ -7,8 +7,8 @@ class ScaleCard extends SimpleCard {
     name = "scale";
     displayName = "Color scale";
 
-    low = new NumUpDown({ name: "low", displayName: "Low (minimum, 0 or more)", value: 0,
-        options: { minValue: { value: 0, type: powerbi.visuals.ValidatorType.Min } } });
+    low = new NumUpDown({ name: "low", displayName: "Low (1 or more, 0 is Empty)", value: 1,
+        options: { minValue: { value: 1, type: powerbi.visuals.ValidatorType.Min } } });
     medium = new NumUpDown({ name: "medium", displayName: "Medium", value: 5 });
     high = new NumUpDown({ name: "high", displayName: "High", value: 10 });
     critical = new NumUpDown({ name: "critical", displayName: "Critical", value: 15 });
