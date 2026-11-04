@@ -48,6 +48,8 @@ export class Visual implements IVisual {
     private viewEl: HTMLElement;
     private statusEl?: HTMLElement;
     private groupColors = new Map<string, THREE.Color>();
+    private styleOverride: boolean | null = null; // viewer's Cards / Colors choice
+    private lastStyleSetting: boolean | null = null;
     private table?: powerbi.DataViewTable;
     private truncated = false;
     private emptyText = "Add X, Y and Value fields to see the 3D heatmap.";
@@ -167,6 +169,9 @@ export class Visual implements IVisual {
         this.emptyMsg.textContent = this.emptyText;
 
         this.cells = this.parse(dv);
+        const def = this.settings.labelsCard.colorGroups.value;
+        if (this.lastStyleSetting !== null && def !== this.lastStyleSetting) this.styleOverride = null;
+        this.lastStyleSetting = def;
         this.resolveScale();
         this.parseGroupColors();
         this.emptyMsg.style.display = this.cells.length ? "none" : "flex";
@@ -503,8 +508,12 @@ export class Visual implements IVisual {
     }
 
     // ---------- color the whole group ----------
+    private useColors(): boolean {
+        return this.styleOverride ?? this.settings.labelsCard.colorGroups.value;
+    }
+
     private colorByGroup(): boolean {
-        return this.settings.labelsCard.colorGroups.value && this.effectiveLabelField() >= 0;
+        return this.useColors() && this.effectiveLabelField() >= 0;
     }
 
     private parseGroupColors(): void {
@@ -840,6 +849,28 @@ export class Visual implements IVisual {
                 wrap.appendChild(bt);
             }
             this.viewEl.appendChild(wrap);
+
+            // Cards / Colors switch, so viewers can pick how groups are shown.
+            const st = document.createElement("div");
+            st.className = "hm-views hm-style";
+            const mkStyle = (text: string, colors: boolean) => {
+                const b = document.createElement("button");
+                b.textContent = text;
+                b.className = this.useColors() === colors ? "on" : "";
+                b.addEventListener("click", () => {
+                    this.styleOverride = colors;
+                    st.querySelectorAll("button").forEach((x) => x.classList.remove("on"));
+                    b.classList.add("on");
+                    this.buildGroupLabels();
+                    this.applyColors();
+                    this.buildLegend();
+                    this.draw();
+                });
+                st.appendChild(b);
+            };
+            mkStyle("Cards", false);
+            mkStyle("Colors", true);
+            this.viewEl.appendChild(st);
         }
     }
 
@@ -906,7 +937,7 @@ export class Visual implements IVisual {
         this.clearGroupLabels();
         const lab = this.settings.labelsCard;
         const gi = this.effectiveLabelField();
-        if (!lab.showLabels.value || gi < 0 || !this.cells.length || lab.colorGroups.value) return;
+        if (!lab.showLabels.value || gi < 0 || !this.cells.length || this.useColors()) return;
 
         type Agg = { sx: number; sy: number; n: number; top: number; crit: number; minX: number; maxX: number; minY: number; maxY: number };
         const crit = this.active.crit;

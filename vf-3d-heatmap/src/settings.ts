@@ -28,7 +28,7 @@ class LabelsCard extends SimpleCard {
     displayName = "Group labels";
 
     showLabels = new ToggleSwitch({ name: "showLabels", displayName: "Show group labels", value: true });
-    colorGroups = new ToggleSwitch({ name: "colorGroups", displayName: "Color whole groups instead of label cards", value: false });
+    colorGroups = new ToggleSwitch({ name: "colorGroups", displayName: "Default style: color whole groups (viewers can switch Cards / Colors)", value: false });
     groupColorList = new TextArea({ name: "groupColorList", displayName: "Group colors (name=color; one per line)", value: "", placeholder: "101=#E63946\n102=blue\n103=#2A9D8F" });
     unlistedHeat = new ToggleSwitch({ name: "unlistedHeat", displayName: "Groups not listed keep heat colors (off = gray)", value: true });
     showCount = new ToggleSwitch({ name: "showCount", displayName: "Show critical bin count", value: true });
