@@ -239,6 +239,20 @@
               }
             }
           }
+        },
+        "showEmpty": {
+          "type": {
+            "bool": true
+          }
+        },
+        "emptyColor": {
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
         }
       }
     },

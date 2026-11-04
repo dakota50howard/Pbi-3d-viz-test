@@ -499,6 +499,7 @@ export class Visual implements IVisual {
             { v: a.crit, c: new THREE.Color(s.criticalColor.value.value) },
         ];
         if (v == null) return new THREE.Color(0x9aa0a6);
+        if (v === 0 && s.showEmpty.value) return new THREE.Color(s.emptyColor.value.value); // empty bins
         if (v <= stops[0].v) return stops[0].c.clone();
         for (let i = 1; i < stops.length; i++) {
             if (v <= stops[i].v) {
@@ -630,6 +631,16 @@ export class Visual implements IVisual {
         if (this.truncated) add(this.legendEl, "hm-ends", `Showing the first ${this.cells.length.toLocaleString()} bins (limit reached)`);
 
         const details = add(this.legendEl, "hm-details");
+        if (s.showEmpty.value) {
+            const row = add(details, "hm-row");
+            const left = add(row, "");
+            const sw = document.createElement("span");
+            sw.className = "hm-swatch";
+            sw.style.background = s.emptyColor.value.value;
+            left.appendChild(sw);
+            left.appendChild(document.createTextNode("Empty"));
+            add(row, "", "0");
+        }
         for (const [label, v, c] of stops) {
             const row = add(details, "hm-row");
             const left = add(row, "");

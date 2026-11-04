@@ -18,9 +18,11 @@ class ScaleCard extends SimpleCard {
     mediumColor = new ColorPicker({ name: "mediumColor", displayName: "Medium color", value: { value: "#F5D90A" } });
     highColor = new ColorPicker({ name: "highColor", displayName: "High color", value: { value: "#F26B3A" } });
     criticalColor = new ColorPicker({ name: "criticalColor", displayName: "Critical color", value: { value: "#D61F2C" } });
+    showEmpty = new ToggleSwitch({ name: "showEmpty", displayName: "Separate level for empty (0)", value: true });
+    emptyColor = new ColorPicker({ name: "emptyColor", displayName: "Empty color", value: { value: "#9AA0A6" } });
 
     slices = [this.low, this.medium, this.high, this.critical, this.auto,
-        this.lowColor, this.mediumColor, this.highColor, this.criticalColor];
+        this.lowColor, this.mediumColor, this.highColor, this.criticalColor, this.showEmpty, this.emptyColor];
 }
 
 class LabelsCard extends SimpleCard {
