@@ -33,11 +33,13 @@ class LabelsCard extends SimpleCard {
     labelSize = new NumUpDown({ name: "labelSize", displayName: "Label size (1 = default)", value: 1 });
     alongGroup = new NumUpDown({ name: "alongGroup", displayName: "Position along group (0 start, 50 middle, 100 end)", value: 50 });
     stagger = new NumUpDown({ name: "stagger", displayName: "Stagger neighbours (0 = off)", value: 1 });
+    staggerX = new NumUpDown({ name: "staggerX", displayName: "Stagger neighbours along X (cube units, 0 = off)", value: 0 });
+    staggerY = new NumUpDown({ name: "staggerY", displayName: "Stagger neighbours along Y (cube units, 0 = off)", value: 0 });
     nudgeUp = new NumUpDown({ name: "nudgeUp", displayName: "Raise labels (cube units)", value: 1.5 });
     nudgeX = new NumUpDown({ name: "nudgeX", displayName: "Move labels along X", value: 0 });
     nudgeY = new NumUpDown({ name: "nudgeY", displayName: "Move labels along Y", value: 0 });
 
-    slices = [this.showLabels, this.showCount, this.onlyCritical, this.labelSize, this.alongGroup, this.stagger, this.nudgeUp, this.nudgeX, this.nudgeY];
+    slices = [this.showLabels, this.showCount, this.onlyCritical, this.labelSize, this.alongGroup, this.stagger, this.staggerX, this.staggerY, this.nudgeUp, this.nudgeX, this.nudgeY];
 }
 
 class LayoutCard extends SimpleCard {

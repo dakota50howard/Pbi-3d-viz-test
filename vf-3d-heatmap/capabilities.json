@@ -352,6 +352,16 @@
           "type": {
             "numeric": true
           }
+        },
+        "staggerX": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "staggerY": {
+          "type": {
+            "numeric": true
+          }
         }
       }
     }

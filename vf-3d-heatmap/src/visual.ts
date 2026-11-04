@@ -880,13 +880,18 @@ export class Visual implements IVisual {
 
         const t = Math.min(100, Math.max(0, lab.alongGroup.value)) / 100;
         const stagger = Math.max(0, lab.stagger.value);
+        // Sideways stagger: capped so labels never drift far from the group they describe.
+        const cap = Math.max(5, Math.max(this.ext.x, this.ext.y) * 0.25);
+        const sx = Math.max(-cap, Math.min(cap, lab.staggerX.value));
+        const sz = Math.max(-cap, Math.min(cap, lab.staggerY.value));
         const span = Math.max(this.ext.x, this.ext.y, this.ext.z, 10);
         const k = (Math.max(0.8, span * 0.045) * Math.max(0.2, lab.labelSize.value)) / 80;
         list.forEach(([name, a], i) => {
             const sp = this.makeGroupLabel(name, lab.showCount.value ? `${a.crit} critical` : null, a.crit > 0, k);
             const tier = i % 3; // alternate three heights so neighbours do not overlap
-            const x = (alongX ? a.minX + t * (a.maxX - a.minX) : a.sx / a.n) + lab.nudgeX.value;
-            const z = (alongX ? a.sy / a.n : a.minY + t * (a.maxY - a.minY)) + lab.nudgeY.value;
+            const side = tier - 1; // -1, 0, +1: neighbours alternate left / centre / right
+            const x = (alongX ? a.minX + t * (a.maxX - a.minX) : a.sx / a.n) + lab.nudgeX.value + side * sx;
+            const z = (alongX ? a.sy / a.n : a.minY + t * (a.maxY - a.minY)) + lab.nudgeY.value + side * sz;
             const y = a.top + lab.nudgeUp.value + sp.scale.y / 2 + tier * stagger * sp.scale.y;
             sp.position.set(x, y, z);
             this.scene.add(sp);
