@@ -373,7 +373,7 @@
             "text": true
           }
         },
-        "unlistedHeat": {
+        "autoColors": {
           "type": {
             "bool": true
           }

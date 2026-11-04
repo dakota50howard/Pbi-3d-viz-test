@@ -30,7 +30,7 @@ class LabelsCard extends SimpleCard {
     showLabels = new ToggleSwitch({ name: "showLabels", displayName: "Show group labels", value: true });
     colorGroups = new ToggleSwitch({ name: "colorGroups", displayName: "Default style: color whole groups (viewers can switch Cards / Colors)", value: false });
     groupColorList = new TextArea({ name: "groupColorList", displayName: "Group colors (name=color; one per line)", value: "", placeholder: "101=#E63946\n102=blue\n103=#2A9D8F" });
-    unlistedHeat = new ToggleSwitch({ name: "unlistedHeat", displayName: "Groups not listed keep heat colors (off = gray)", value: true });
+    autoColors = new ToggleSwitch({ name: "autoColors", displayName: "Automatic colors for groups not listed (off = heat colors)", value: true });
     showCount = new ToggleSwitch({ name: "showCount", displayName: "Show critical bin count", value: true });
     onlyCritical = new ToggleSwitch({ name: "onlyCritical", displayName: "Only label groups with critical bins", value: false });
     labelSize = new NumUpDown({ name: "labelSize", displayName: "Label size (1 = default)", value: 1 });
@@ -42,7 +42,7 @@ class LabelsCard extends SimpleCard {
     nudgeX = new NumUpDown({ name: "nudgeX", displayName: "Move labels along X", value: 0 });
     nudgeY = new NumUpDown({ name: "nudgeY", displayName: "Move labels along Y", value: 0 });
 
-    slices = [this.showLabels, this.colorGroups, this.groupColorList, this.unlistedHeat, this.showCount, this.onlyCritical, this.labelSize, this.alongGroup, this.stagger, this.staggerX, this.staggerY, this.nudgeUp, this.nudgeX, this.nudgeY];
+    slices = [this.showLabels, this.colorGroups, this.groupColorList, this.autoColors, this.showCount, this.onlyCritical, this.labelSize, this.alongGroup, this.stagger, this.staggerX, this.staggerY, this.nudgeUp, this.nudgeX, this.nudgeY];
 }
 
 class TextCard extends SimpleCard {

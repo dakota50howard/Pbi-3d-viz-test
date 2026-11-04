@@ -48,6 +48,7 @@ export class Visual implements IVisual {
     private viewEl: HTMLElement;
     private statusEl?: HTMLElement;
     private groupColors = new Map<string, THREE.Color>();
+    private autoColors = new Map<string, THREE.Color>();
     private styleOverride: boolean | null = null; // viewer's Cards / Colors choice
     private lastStyleSetting: boolean | null = null;
     private table?: powerbi.DataViewTable;
@@ -174,6 +175,7 @@ export class Visual implements IVisual {
         this.lastStyleSetting = def;
         this.resolveScale();
         this.parseGroupColors();
+        this.buildAutoColors();
         this.emptyMsg.style.display = this.cells.length ? "none" : "flex";
         this.build();
         this.buildFilterPanel();
@@ -531,12 +533,33 @@ export class Visual implements IVisual {
         }
     }
 
+    // Automatic colors for groups you haven't listed. Assigned by each group's place in the sorted list of ALL groups,
+    // so listing a group by hand never shifts the other groups' colors.
+    private buildAutoColors(): void {
+        this.autoColors.clear();
+        const gi = this.effectiveLabelField();
+        if (gi < 0 || !this.settings.labelsCard.autoColors.value) return;
+        const palette = ["#4E79A7", "#F28E2B", "#E15759", "#76B7B2", "#59A14F", "#EDC948", "#B07AA1", "#FF9DA7",
+            "#9C755F", "#86BCB6", "#D37295", "#499894", "#8CD17D", "#B6992D", "#FABFD2", "#79706E",
+            "#A0CBE8", "#FFBE7D", "#D4A6C8", "#BAB0AC"];
+        const names = Array.from(new Set(this.cells.map((c) => c.groups[gi]).filter((g) => !!g)))
+            .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        names.forEach((n, i) => {
+            const key = n.trim().toLowerCase();
+            if (this.groupColors.has(key)) return;
+            const col = i < palette.length
+                ? new THREE.Color(palette[i])
+                : new THREE.Color().setHSL(((i * 0.618034) % 1), 0.6, 0.5);
+            this.autoColors.set(key, col);
+        });
+    }
+
     private groupColorFor(c: Cell): THREE.Color | null {
         const gi = this.effectiveLabelField();
         const g = gi >= 0 ? c.groups[gi] : "";
-        const hit = g ? this.groupColors.get(g.trim().toLowerCase()) : undefined;
-        if (hit) return hit.clone();
-        return this.settings.labelsCard.unlistedHeat.value ? null : new THREE.Color(0xb8bec6);
+        const key = g ? g.trim().toLowerCase() : "";
+        const hit = this.groupColors.get(key) ?? this.autoColors.get(key);
+        return hit ? hit.clone() : null; // no color for this bin: fall back to the heat scale
     }
 
     private applyColors(): void {
@@ -586,8 +609,9 @@ export class Visual implements IVisual {
                 const left = add(row, "");
                 const sw = document.createElement("span");
                 sw.className = "hm-swatch";
-                const gc = this.groupColors.get(n.trim().toLowerCase());
-                sw.style.background = gc ? "#" + gc.getHexString() : (this.settings.labelsCard.unlistedHeat.value ? "linear-gradient(90deg,#22A850,#F5D90A,#D61F2C)" : "#b8bec6");
+                const key = n.trim().toLowerCase();
+                const gc = this.groupColors.get(key) ?? this.autoColors.get(key);
+                sw.style.background = gc ? "#" + gc.getHexString() : "linear-gradient(90deg,#22A850,#F5D90A,#D61F2C)";
                 left.appendChild(sw);
                 left.appendChild(document.createTextNode(n));
             });
@@ -841,6 +865,7 @@ export class Visual implements IVisual {
                     this.labelPick = o.i;
                     wrap.querySelectorAll("button").forEach((x) => x.classList.remove("on"));
                     bt.classList.add("on");
+                    this.buildAutoColors();
                     this.buildGroupLabels();
                     this.applyColors();
                     this.buildLegend();
