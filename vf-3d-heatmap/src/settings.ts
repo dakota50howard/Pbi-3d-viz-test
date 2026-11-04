@@ -42,6 +42,18 @@ class LabelsCard extends SimpleCard {
     slices = [this.showLabels, this.showCount, this.onlyCritical, this.labelSize, this.alongGroup, this.stagger, this.staggerX, this.staggerY, this.nudgeUp, this.nudgeX, this.nudgeY];
 }
 
+class TextCard extends SimpleCard {
+    name = "text";
+    displayName = "Text size";
+
+    uiSize = new NumUpDown({ name: "uiSize", displayName: "Panel text size (legend, filters, view)", value: 11,
+        options: { minValue: { value: 7, type: powerbi.visuals.ValidatorType.Min }, maxValue: { value: 36, type: powerbi.visuals.ValidatorType.Max } } });
+    autoPanels = new ToggleSwitch({ name: "autoPanels", displayName: "Auto-scale panels with visual size", value: true });
+    axisSize = new NumUpDown({ name: "axisSize", displayName: "Axis label size (1 = default)", value: 1 });
+
+    slices = [this.uiSize, this.autoPanels, this.axisSize];
+}
+
 class LayoutCard extends SimpleCard {
     name = "layout";
     displayName = "Layout";
@@ -67,7 +79,8 @@ class LayoutCard extends SimpleCard {
 
 export class VisualFormattingSettingsModel extends Model {
     scaleCard = new ScaleCard();
+    textCard = new TextCard();
     labelsCard = new LabelsCard();
     layoutCard = new LayoutCard();
-    cards = [this.scaleCard, this.labelsCard, this.layoutCard];
+    cards = [this.scaleCard, this.textCard, this.labelsCard, this.layoutCard];
 }

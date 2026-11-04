@@ -141,6 +141,12 @@ export class Visual implements IVisual {
         this.settings = this.fmtService.populateFormattingSettingsModel(VisualFormattingSettingsModel, dv);
 
         const { width, height } = options.viewport;
+
+        // Panel text size: your setting, scaled with the visual's size so panels stay readable and fit.
+        const tx = this.settings.textCard;
+        const base = Math.min(36, Math.max(7, tx.uiSize.value));
+        const auto = tx.autoPanels.value ? Math.min(1.6, Math.max(0.7, Math.min(width / 900, height / 520))) : 1;
+        this.root.style.setProperty("--hm-fs", (base * auto).toFixed(2) + "px");
         this.renderer.setSize(width, height);
         this.camera.aspect = width / Math.max(height, 1);
         this.camera.updateProjectionMatrix();
@@ -421,7 +427,7 @@ export class Visual implements IVisual {
         const { x: ex, y: ey, z: ez } = this.ext;
         const floorY = -this.cubeSize / 2;
         const span = Math.max(ex, ey, ez, 10);
-        const h = Math.max(0.8, span * 0.028);
+        const h = Math.max(0.8, span * 0.028) * Math.min(4, Math.max(0.3, this.settings.textCard.axisSize.value));
         const gap = h * 2.6;
         const thin = (ticks: Tick[], minGap: number) => {
             const out: Tick[] = [];

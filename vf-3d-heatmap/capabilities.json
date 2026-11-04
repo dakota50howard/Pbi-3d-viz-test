@@ -364,6 +364,25 @@
           }
         }
       }
+    },
+    "text": {
+      "properties": {
+        "uiSize": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "autoPanels": {
+          "type": {
+            "bool": true
+          }
+        },
+        "axisSize": {
+          "type": {
+            "numeric": true
+          }
+        }
+      }
     }
   },
   "supportsMultiVisualSelection": true

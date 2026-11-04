@@ -14,84 +14,86 @@
     }
 
     .hm-legend {
-        position: absolute; left: 8px; bottom: 8px;
-        width: 210px; padding: 10px 12px;
-        background: #fff; border-radius: 8px;
+        max-height: calc(100% - 16px); overflow-y: auto; box-sizing: border-box;
+        position: absolute; left: 0.727em; bottom: 0.727em;
+        width: 19.091em; padding: 0.909em 1.091em;
+        background: #fff; border-radius: 0.727em;
         box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
-        font-size: 11px; color: #333;
+        font-size: var(--hm-fs, 11px); color: #333;
 
-        .hm-title { font-weight: 600; margin-bottom: 6px; }
-        .hm-bar { height: 7px; border-radius: 4px; }
-        .hm-ends { display: flex; justify-content: space-between; color: #777; margin-top: 2px; }
-        .hm-details { margin-top: 8px; }
-        .hm-row { display: flex; align-items: center; justify-content: space-between; margin-top: 3px; color: #555; }
-        .hm-swatch { width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; display: inline-block; }
+        .hm-title { font-weight: 600; margin-bottom: 0.545em; }
+        .hm-bar { height: 0.636em; border-radius: 0.364em; }
+        .hm-ends { display: flex; justify-content: space-between; color: #777; margin-top: 0.182em; }
+        .hm-details { margin-top: 0.727em; }
+        .hm-row { display: flex; align-items: center; justify-content: space-between; margin-top: 0.273em; color: #555; }
+        .hm-swatch { width: 0.818em; height: 0.818em; border-radius: 0.182em; margin-right: 0.545em; display: inline-block; }
     }
 
     .hm-panel {
-        position: absolute; left: 8px; top: 8px;
-        width: 190px; padding: 10px 12px;
-        background: #fff; border-radius: 8px;
+        position: absolute; left: 0.727em; top: 0.727em;
+        width: 17.273em; padding: 0.909em 1.091em;
+        background: #fff; border-radius: 0.727em;
         box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
-        font-size: 11px; color: #333;
+        font-size: var(--hm-fs, 11px); color: #333;
 
-        .hm-ptitle { font-weight: 600; margin-bottom: 8px; }
-        .hm-seg { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; color: #555;
-            button { border: 1px solid #c8ccd2; background: #fff; padding: 2px 9px; font-size: 11px; cursor: pointer; color: #333;
-                &:first-child { border-radius: 4px 0 0 4px; }
-                &:last-child { border-radius: 0 4px 4px 0; border-left: 0; }
+        .hm-ptitle { font-weight: 600; margin-bottom: 0.727em; }
+        .hm-seg { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.727em; color: #555;
+            button { border: 1px solid #c8ccd2; background: #fff; padding: 0.182em 0.818em; font-size: 1em; cursor: pointer; color: #333;
+                &:first-child { border-radius: 0.364em 0 0 0.364em; }
+                &:last-child { border-radius: 0 0.364em 0.364em 0; border-left: 0; }
                 &.on { background: #e3ecf8; border-color: #3b6fb6; color: #1f4e8c; }
             }
         }
-        .hm-search { position: relative; margin-top: 6px;
-            input { width: 100%; box-sizing: border-box; padding: 4px 22px 4px 6px; font-size: 11px;
-                border: 1px solid #c8ccd2; border-radius: 4px; background: #fff; color: #333; }
-            .hm-clear { position: absolute; right: 2px; top: 1px; border: 0; background: transparent;
-                font-size: 14px; line-height: 20px; color: #888; cursor: pointer; padding: 0 5px; }
+        .hm-search { position: relative; margin-top: 0.545em;
+            input { width: 100%; box-sizing: border-box; padding: 0.364em 2em 0.364em 0.545em; font-size: 1em;
+                border: 1px solid #c8ccd2; border-radius: 0.364em; background: #fff; color: #333; }
+            .hm-clear { position: absolute; right: 0.182em; top: 1px; border: 0; background: transparent;
+                font-size: 1.273em; line-height: 1.818em; color: #888; cursor: pointer; padding: 0 0.455em; }
             .hm-list { display: none; position: absolute; left: 0; right: 0; top: 100%; z-index: 5;
-                max-height: 170px; overflow-y: auto; background: #fff; border: 1px solid #c8ccd2;
-                border-radius: 4px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
-                div { padding: 4px 6px; cursor: pointer; &:hover { background: #e3ecf8; } }
+                max-height: 15.455em; overflow-y: auto; background: #fff; border: 1px solid #c8ccd2;
+                border-radius: 0.364em; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+                div { padding: 0.364em 0.545em; cursor: pointer; &:hover { background: #e3ecf8; } }
                 .hm-more { color: #888; cursor: default; &:hover { background: transparent; } }
             }
         }
-        .hm-status { margin-top: 8px; color: #777; }
-        select { display: block; width: 100%; margin-top: 6px; padding: 4px 6px; font-size: 11px;
-            border: 1px solid #c8ccd2; border-radius: 4px; background: #fff; color: #333; }
+        .hm-status { margin-top: 0.727em; color: #777; }
+        select { display: block; width: 100%; margin-top: 0.545em; padding: 0.364em 0.545em; font-size: 1em;
+            border: 1px solid #c8ccd2; border-radius: 0.364em; background: #fff; color: #333; }
     }
 
     .hm-view {
-        position: absolute; right: 8px; top: 8px;
-        width: 180px; padding: 10px 12px;
-        background: #fff; border-radius: 8px;
+        max-height: calc(100% - 16px); overflow-y: auto; box-sizing: border-box;
+        position: absolute; right: 0.727em; top: 0.727em;
+        width: 16.364em; padding: 0.909em 1.091em;
+        background: #fff; border-radius: 0.727em;
         box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
-        font-size: 11px; color: #333;
+        font-size: var(--hm-fs, 11px); color: #333;
 
-        .hm-ptitle { font-weight: 600; margin-bottom: 8px; }
+        .hm-ptitle { font-weight: 600; margin-bottom: 0.727em; }
         .hm-views { display: flex;
-            button { flex: 1; border: 1px solid #c8ccd2; background: #fff; padding: 3px 0; font-size: 11px; cursor: pointer; color: #333;
-                &:first-child { border-radius: 4px 0 0 4px; }
-                &:last-child { border-radius: 0 4px 4px 0; }
+            button { flex: 1; border: 1px solid #c8ccd2; background: #fff; padding: 0.273em 0; font-size: 1em; cursor: pointer; color: #333;
+                &:first-child { border-radius: 0.364em 0 0 0.364em; }
+                &:last-child { border-radius: 0 0.364em 0.364em 0; }
                 & + button { border-left: 0; }
                 &:hover { background: #e3ecf8; }
             }
         }
-        .hm-ltitle { margin-top: 10px; color: #555; }
-        .hm-opts { margin-top: 4px;
-            button { display: block; width: 100%; text-align: left; margin-top: 3px; padding: 3px 8px; font-size: 11px;
-                border: 1px solid #c8ccd2; border-radius: 4px; background: #fff; color: #333; cursor: pointer;
+        .hm-ltitle { margin-top: 0.909em; color: #555; }
+        .hm-opts { margin-top: 0.364em;
+            button { display: block; width: 100%; text-align: left; margin-top: 0.273em; padding: 0.273em 0.727em; font-size: 1em;
+                border: 1px solid #c8ccd2; border-radius: 0.364em; background: #fff; color: #333; cursor: pointer;
                 &:hover { background: #eef3fa; }
                 &.on { background: #e3ecf8; border-color: #3b6fb6; color: #1f4e8c; }
             }
         }
-        .hm-select { display: block; width: 100%; margin-top: 4px; padding: 4px 6px; font-size: 11px;
-            border: 1px solid #c8ccd2; border-radius: 4px; background: #fff; color: #333; }
-        .hm-hint { margin-top: 6px; color: #777; line-height: 1.3; }
-        .hm-btn { margin-top: 6px; width: 100%; padding: 4px 0; font-size: 11px; cursor: pointer;
-            border: 1px solid #c8ccd2; border-radius: 4px; background: #fff; color: #333; &:hover { background: #e3ecf8; } }
-        .hm-lvl { display: flex; align-items: center; margin-top: 4px; gap: 6px;
+        .hm-select { display: block; width: 100%; margin-top: 0.364em; padding: 0.364em 0.545em; font-size: 1em;
+            border: 1px solid #c8ccd2; border-radius: 0.364em; background: #fff; color: #333; }
+        .hm-hint { margin-top: 0.545em; color: #777; line-height: 1.3; }
+        .hm-btn { margin-top: 0.545em; width: 100%; padding: 0.364em 0; font-size: 1em; cursor: pointer;
+            border: 1px solid #c8ccd2; border-radius: 0.364em; background: #fff; color: #333; &:hover { background: #e3ecf8; } }
+        .hm-lvl { display: flex; align-items: center; margin-top: 0.364em; gap: 0.545em;
             input { flex: 1; min-width: 0; }
-            .hm-lvlout { width: 28px; text-align: right; color: #777; }
+            .hm-lvlout { width: 2.545em; text-align: right; color: #777; }
         }
     }
 }
