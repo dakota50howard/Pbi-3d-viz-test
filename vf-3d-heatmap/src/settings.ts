@@ -49,6 +49,7 @@ class LayoutCard extends SimpleCard {
     showFloor = new ToggleSwitch({ name: "showFloor", displayName: "Show floor", value: true });
     showLegend = new ToggleSwitch({ name: "showLegend", displayName: "Show legend", value: true });
     showAxisLabels = new ToggleSwitch({ name: "showAxisLabels", displayName: "Show axis labels", value: true });
+    tipOnly = new ToggleSwitch({ name: "tipOnly", displayName: "Tooltips: only show fields from the Tooltips well", value: false });
 
     useBinDims = new ToggleSwitch({ name: "useBinDims", displayName: "Use bin length / width / height", value: true });
     dimScale = new NumUpDown({ name: "dimScale", displayName: "Bin size scale (0 = auto)", value: 0 });
@@ -58,7 +59,7 @@ class LayoutCard extends SimpleCard {
     yScale = new NumUpDown({ name: "yScale", displayName: "Y scale (0 = auto)", value: 0 });
     zScale = new NumUpDown({ name: "zScale", displayName: "Z scale (0 = auto)", value: 0 });
 
-    slices = [this.cubeSize, this.levelSpacing, this.showFloor, this.showLegend, this.showAxisLabels,
+    slices = [this.cubeSize, this.levelSpacing, this.showFloor, this.showLegend, this.showAxisLabels, this.tipOnly,
         this.useBinDims, this.dimScale, this.trueCoords, this.xScale, this.yScale, this.zScale];
 }
 
