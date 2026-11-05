@@ -36,3 +36,9 @@ or a color name like blue). Any number of groups. Groups not listed get an autom
 The legend lists the groups it found so you know the exact names to type.
 
 The View card's Group labels section has a Cards / Colors switch for viewers. The format pane setting is the default they see first.
+
+## Racking
+Put the aisle number in the "Aisle (for racking)" well (without it, bins sharing an X position are treated as one rack).
+Each aisle gets uprights at the bay breaks plus a beam and a shelf at every level. The View card has an Off / Frame /
+Shelves switch; the Racking card sets the default, shelf opacity, colors, and a fixed bay length if the automatic bay
+detection places posts oddly.

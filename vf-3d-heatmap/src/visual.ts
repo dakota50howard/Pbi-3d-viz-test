@@ -27,6 +27,7 @@ interface Cell {
     bw: number; bd: number; bh: number;
     cats: string[];
     groups: string[];
+    aisle: string;
     tip: { displayName: string; value: string }[];
     row: number;
     id?: ISelectionId;
@@ -50,6 +51,9 @@ export class Visual implements IVisual {
     private groupColors = new Map<string, THREE.Color>();
     private autoColors = new Map<string, THREE.Color>();
     private styleOverride: boolean | null = null; // viewer's Cards / Colors choice
+    private rackMeshes: THREE.InstancedMesh[] = [];
+    private rackOverride: "off" | "frame" | "shelves" | null = null; // viewer's racking choice
+    private lastRackKey = "";
     private lastStyleSetting: boolean | null = null;
     private table?: powerbi.DataViewTable;
     private truncated = false;
@@ -173,6 +177,10 @@ export class Visual implements IVisual {
         const def = this.settings.labelsCard.colorGroups.value;
         if (this.lastStyleSetting !== null && def !== this.lastStyleSetting) this.styleOverride = null;
         this.lastStyleSetting = def;
+        const rk = this.settings.rackCard;
+        const rackKey = `${rk.showRacking.value}|${rk.showShelves.value}`;
+        if (this.lastRackKey !== "" && rackKey !== this.lastRackKey) this.rackOverride = null;
+        this.lastRackKey = rackKey;
         this.resolveScale();
         this.parseGroupColors();
         this.buildAutoColors();
@@ -220,6 +228,7 @@ export class Visual implements IVisual {
                 .sort((a, b) => a.localeCompare(b, undefined, { numeric: true })));
         this.catSel = this.catSel.map((v, k) => (this.catExact[k] && !this.catOptions[k].includes(v) ? "" : v));
         const gC = ["group1", "group2", "group3"].map(idx);
+        const aC = idx("aisle");
         this.groupNames = gC.map((c) => (c >= 0 ? cols[c].displayName : ""));
         if (xC < 0 || yC < 0) return [];
 
@@ -290,6 +299,7 @@ export class Visual implements IVisual {
                 bw: 1, bd: 1, bh: 1,
                 cats: fC.map((c) => (c >= 0 && r[c] != null ? String(r[c]) : "")),
                 groups: gC.map((c) => (c >= 0 && r[c] != null ? String(r[c]) : "")),
+                aisle: aC >= 0 && r[aC] != null ? String(r[aC]) : "",
                 tip: onlyTipWell
                     ? tipCols.map((c) => ({ displayName: cols[c].displayName, value: fmt(r[c]) }))
                     : [
@@ -346,6 +356,7 @@ export class Visual implements IVisual {
         }
         this.clearLabels();
         this.clearGroupLabels();
+        this.clearRacking();
         if (!this.cells.length) return;
 
         const lay = this.settings.layoutCard;
@@ -392,6 +403,7 @@ export class Visual implements IVisual {
 
         if (lay.showAxisLabels.value) this.buildLabels();
         this.buildGroupLabels();
+        this.buildRacking();
         this.applyColors();
 
         const dims = `${mx.toFixed(1)}x${my.toFixed(1)}x${mz.toFixed(1)}`;
@@ -694,6 +706,7 @@ export class Visual implements IVisual {
     private onFilterChange(): void {
         this.updateStatus();
         this.buildGroupLabels();
+        this.buildRacking();
         this.applyVisibility();
         this.applyColors();
         this.draw();
@@ -857,6 +870,30 @@ export class Visual implements IVisual {
             slider("To", () => this.lvlTo, (v) => { this.lvlTo = Math.max(v, this.lvlFrom); });
         }
 
+        const rt = document.createElement("div");
+        rt.className = "hm-ltitle";
+        rt.textContent = "Racking";
+        this.viewEl.appendChild(rt);
+        const rs = document.createElement("div");
+        rs.className = "hm-views hm-style";
+        const mkRack = (text: string, mode: "off" | "frame" | "shelves") => {
+            const b = document.createElement("button");
+            b.textContent = text;
+            b.className = this.rackMode() === mode ? "on" : "";
+            b.addEventListener("click", () => {
+                this.rackOverride = mode;
+                rs.querySelectorAll("button").forEach((x) => x.classList.remove("on"));
+                b.classList.add("on");
+                this.buildRacking();
+                this.draw();
+            });
+            rs.appendChild(b);
+        };
+        mkRack("Off", "off");
+        mkRack("Frame", "frame");
+        mkRack("Shelves", "shelves");
+        this.viewEl.appendChild(rs);
+
         const names = this.groupNames.map((n, i) => ({ n, i })).filter((g) => g.n !== "");
         if (names.length) {
             const gt = document.createElement("div");
@@ -908,6 +945,120 @@ export class Visual implements IVisual {
             mkStyle("Colors", true);
             this.viewEl.appendChild(st);
         }
+    }
+
+    // ---------- racking ----------
+    private rackMode(): "off" | "frame" | "shelves" {
+        if (this.rackOverride) return this.rackOverride;
+        const rk = this.settings.rackCard;
+        if (!rk.showRacking.value) return "off";
+        return rk.showShelves.value ? "shelves" : "frame";
+    }
+
+    private clearRacking(): void {
+        for (const m of this.rackMeshes) {
+            this.scene.remove(m);
+            m.geometry.dispose();
+            (m.material as THREE.Material).dispose();
+        }
+        this.rackMeshes = [];
+    }
+
+    // One rack per aisle (one row of bins running along Y): posts at the bay breaks, and a beam + shelf at every level.
+    private buildRacking(): void {
+        this.clearRacking();
+        const mode = this.rackMode();
+        if (mode === "off" || !this.cells.length) return;
+        const rk = this.settings.rackCard;
+
+        // group bins into racks: by the Aisle field, otherwise by X position
+        const racks = new Map<string, Cell[]>();
+        for (const c of this.cells) {
+            if (!this.inLevel(c)) continue;
+            const key = c.aisle !== "" ? "a:" + c.aisle : "x:" + c.px.toFixed(2);
+            const l = racks.get(key);
+            if (l) l.push(c); else racks.set(key, [c]);
+        }
+
+        const posts: number[][] = [];  // [x, yBottom, z, height]
+        const beams: number[][] = [];  // [x, y, zCentre, length]
+        const decks: number[][] = [];  // [x, y, zCentre, length, width]
+        const T = 0.11;                // post / beam thickness
+        const D = 0.06;                // shelf thickness
+        const bayLen = Math.max(0, rk.bayLength.value);
+
+        racks.forEach((list) => {
+            let sx = 0, minY = Infinity, maxY = -Infinity, bw = 0, topH = 0;
+            const lvls = new Map<number, number>(); // level position -> tallest bin on it
+            const ys = new Set<number>();
+            for (const c of list) {
+                sx += c.px;
+                minY = Math.min(minY, c.py - c.bd / 2);
+                maxY = Math.max(maxY, c.py + c.bd / 2);
+                bw = Math.max(bw, c.bw);
+                ys.add(c.py);
+                lvls.set(c.pz, Math.max(lvls.get(c.pz) ?? 0, c.bh));
+            }
+            const x = sx / list.length;
+            const half = bw / 2 + 0.07;
+            const start = minY - 0.05, end = maxY + 0.05;
+            const len = end - start, zc = (start + end) / 2;
+
+            // post positions along the aisle
+            const zs: number[] = [start];
+            if (bayLen > 0) {
+                for (let z = start + bayLen; z < end - 0.01; z += bayLen) zs.push(z);
+            } else {
+                const sorted = Array.from(ys).sort((a, b) => a - b);
+                for (let i = 1; i < sorted.length; i++) {
+                    if (sorted[i] - sorted[i - 1] > 1.5) zs.push((sorted[i] + sorted[i - 1]) / 2);
+                }
+            }
+            zs.push(end);
+
+            const levelPos = Array.from(lvls.keys()).sort((a, b) => a - b);
+            const bottomY = levelPos[0] * this.lvl - this.cubeSize / 2 - D;
+            const topPos = levelPos[levelPos.length - 1];
+            topH = lvls.get(topPos) ?? this.cubeSize;
+            const topY = topPos * this.lvl - this.cubeSize / 2 + topH + 0.15;
+
+            for (const z of zs) {
+                posts.push([x - half, bottomY, z, topY - bottomY]);
+                posts.push([x + half, bottomY, z, topY - bottomY]);
+            }
+            for (const lp of levelPos) {
+                const y = lp * this.lvl - this.cubeSize / 2 - D / 2;
+                beams.push([x - half, y, zc, len]);
+                beams.push([x + half, y, zc, len]);
+                if (mode === "shelves") decks.push([x, y, zc, len, half * 2]);
+            }
+        });
+
+        const make = (n: number, color: string, opacity: number): THREE.InstancedMesh | null => {
+            if (!n) return null;
+            const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.25 });
+            if (opacity < 1) { mat.transparent = true; mat.opacity = opacity; mat.depthWrite = false; }
+            const m = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), mat, n);
+            m.raycast = () => { /* racking never blocks hover or clicks */ };
+            m.frustumCulled = false;
+            this.scene.add(m);
+            this.rackMeshes.push(m);
+            return m;
+        };
+        const mat4 = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), sc = new THREE.Vector3();
+        const put = (m: THREE.InstancedMesh, i: number, px: number, py: number, pz: number, w: number, h: number, d: number) => {
+            pos.set(px, py, pz);
+            sc.set(w, h, d);
+            m.setMatrixAt(i, mat4.compose(pos, q, sc));
+        };
+
+        const pm = make(posts.length, rk.uprightColor.value.value, 1);
+        posts.forEach((p, i) => put(pm!, i, p[0], p[1] + p[3] / 2, p[2], T, p[3], T));
+        const bm = make(beams.length, rk.beamColor.value.value, 1);
+        beams.forEach((b, i) => put(bm!, i, b[0], b[1], b[2], T, T * 0.9, b[3]));
+        const dm = make(decks.length, rk.shelfColor.value.value, Math.min(1, Math.max(0.05, rk.shelfOpacity.value)));
+        decks.forEach((d, i) => put(dm!, i, d[0], d[1], d[2], d[4], 0.05, d[3]));
+        for (const m of this.rackMeshes) m.instanceMatrix.needsUpdate = true;
     }
 
     // ---------- group labels ----------
@@ -1071,6 +1222,7 @@ export class Visual implements IVisual {
     }
 
     public destroy(): void {
+        this.clearRacking();
         this.clearLabels();
         this.clearGroupLabels();
         this.controls.dispose();

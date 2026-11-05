@@ -72,6 +72,11 @@
       "kind": "Grouping"
     },
     {
+      "name": "aisle",
+      "displayName": "Aisle (for racking)",
+      "kind": "Grouping"
+    },
+    {
       "name": "tooltips",
       "displayName": "Tooltips",
       "kind": "GroupingOrMeasure"
@@ -150,6 +155,11 @@
             {
               "for": {
                 "in": "group3"
+              }
+            },
+            {
+              "for": {
+                "in": "aisle"
               }
             },
             {
@@ -409,6 +419,57 @@
         "axisSize": {
           "type": {
             "numeric": true
+          }
+        }
+      }
+    },
+    "racking": {
+      "properties": {
+        "showRacking": {
+          "type": {
+            "bool": true
+          }
+        },
+        "showShelves": {
+          "type": {
+            "bool": true
+          }
+        },
+        "shelfOpacity": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "bayLength": {
+          "type": {
+            "numeric": true
+          }
+        },
+        "uprightColor": {
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        },
+        "beamColor": {
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        },
+        "shelfColor": {
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
           }
         }
       }

@@ -59,6 +59,21 @@ class TextCard extends SimpleCard {
     slices = [this.uiSize, this.autoPanels, this.axisSize];
 }
 
+class RackCard extends SimpleCard {
+    name = "racking";
+    displayName = "Racking";
+
+    showRacking = new ToggleSwitch({ name: "showRacking", displayName: "Show racking", value: true });
+    showShelves = new ToggleSwitch({ name: "showShelves", displayName: "Show shelves (off = frame only)", value: true });
+    shelfOpacity = new NumUpDown({ name: "shelfOpacity", displayName: "Shelf opacity (0.05 - 1)", value: 0.3 });
+    bayLength = new NumUpDown({ name: "bayLength", displayName: "Bay length in cells (0 = auto)", value: 0 });
+    uprightColor = new ColorPicker({ name: "uprightColor", displayName: "Upright color", value: { value: "#3B6FB6" } });
+    beamColor = new ColorPicker({ name: "beamColor", displayName: "Beam color", value: { value: "#F28E2B" } });
+    shelfColor = new ColorPicker({ name: "shelfColor", displayName: "Shelf color", value: { value: "#B8BEC6" } });
+
+    slices = [this.showRacking, this.showShelves, this.shelfOpacity, this.bayLength, this.uprightColor, this.beamColor, this.shelfColor];
+}
+
 class LayoutCard extends SimpleCard {
     name = "layout";
     displayName = "Layout";
@@ -86,6 +101,7 @@ export class VisualFormattingSettingsModel extends Model {
     scaleCard = new ScaleCard();
     textCard = new TextCard();
     labelsCard = new LabelsCard();
+    rackCard = new RackCard();
     layoutCard = new LayoutCard();
-    cards = [this.scaleCard, this.textCard, this.labelsCard, this.layoutCard];
+    cards = [this.scaleCard, this.textCard, this.labelsCard, this.rackCard, this.layoutCard];
 }
