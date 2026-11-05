@@ -77,11 +77,6 @@
       "kind": "Grouping"
     },
     {
-      "name": "location",
-      "displayName": "Location ID (for pick paths)",
-      "kind": "Grouping"
-    },
-    {
       "name": "tooltips",
       "displayName": "Tooltips",
       "kind": "GroupingOrMeasure"
@@ -95,11 +90,6 @@
       "name": "pickSeq",
       "displayName": "Pick sequence (pick paths)",
       "kind": "GroupingOrMeasure"
-    },
-    {
-      "name": "pickLoc",
-      "displayName": "Pick location (pick paths)",
-      "kind": "Grouping"
     }
   ],
   "dataViewMappings": [
@@ -184,42 +174,6 @@
             },
             {
               "for": {
-                "in": "location"
-              }
-            },
-            {
-              "for": {
-                "in": "tooltips"
-              }
-            }
-          ],
-          "dataReductionAlgorithm": {
-            "window": {
-              "count": 30000
-            }
-          }
-        }
-      }
-    },
-    {
-      "conditions": [
-        {
-          "pickCarton": {
-            "min": 1
-          },
-          "pickSeq": {
-            "min": 1
-          },
-          "pickLoc": {
-            "min": 1
-          }
-        }
-      ],
-      "table": {
-        "rows": {
-          "select": [
-            {
-              "for": {
                 "in": "pickCarton"
               }
             },
@@ -230,7 +184,7 @@
             },
             {
               "for": {
-                "in": "pickLoc"
+                "in": "tooltips"
               }
             }
           ],

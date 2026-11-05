@@ -44,6 +44,6 @@ Shelves switch; the Racking card sets the default, shelf opacity, colors, and a 
 detection places posts oddly.
 
 ## Pick paths (experimental branch)
-Fill the three Pick wells from a query with one row per pick: Carton, Pick sequence, Pick location. Also put the bin's
-code (the same value as Pick location, e.g. ACLBCD) in the "Location ID (for pick paths)" well. Use the Pick paths card
-(bottom right) to add up to a few cartons; each gets a colored, numbered route that follows the aisles around the racking.
+Needs a relationship from the bin table's location code (e.g. ACLBCD) to the pick table's location (e.g. PRFLOC).
+Drop the pick table's Carton and a sequence field (e.g. time completed) in the "Carton" and "Pick sequence" wells.
+Use the Pick paths panel (bottom right) to add a few cartons; each gets a colored, numbered route around the racking.

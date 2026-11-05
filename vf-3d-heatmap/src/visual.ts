@@ -76,6 +76,7 @@ export class Visual implements IVisual {
     private lastPathDimSetting: boolean | null = null;
     private locIndex = new Map<string, number>();
     private grid?: PGrid;
+    private pickRows: { carton: string; seq: number; loc: string }[] = [];
     private rackOverride: "off" | "frame" | "shelves" | null = null; // viewer's racking choice
     private lastRackKey = "";
     private lastStyleSetting: boolean | null = null;
@@ -173,11 +174,7 @@ export class Visual implements IVisual {
     }
 
     public update(options: VisualUpdateOptions): void {
-        // The visual can receive two data views: the bins, and (optionally) the pick steps. Tell them apart by their roles.
-        const dvs = options.dataViews ?? [];
-        const isPick = (d: DataView) => !!d.table?.columns?.some((c) => c.roles && (c.roles.pickCarton || c.roles.pickLoc || c.roles.pickSeq));
-        const dv = dvs.find((d) => !isPick(d));
-        const pdv = dvs.find(isPick);
+        const dv = options.dataViews?.[0];
         this.settings = this.fmtService.populateFormattingSettingsModel(VisualFormattingSettingsModel, dv);
 
         const { width, height } = options.viewport;
@@ -195,7 +192,7 @@ export class Visual implements IVisual {
         const MAX_ROWS = 100000;
         const loaded = dv?.table?.rows?.length ?? 0;
         this.truncated = false;
-        if (dv?.metadata?.segment || pdv?.metadata?.segment) {
+        if (dv?.metadata?.segment) {
             if (loaded < MAX_ROWS && this.host.fetchMoreData(true)) {
                 this.emptyMsg.textContent = `Loading bins... ${loaded.toLocaleString()} so far`;
                 this.emptyMsg.style.display = "flex";
@@ -207,7 +204,7 @@ export class Visual implements IVisual {
 
         this.cells = this.parse(dv);
         this.grid = undefined;
-        this.parsePicks(pdv);
+        this.parsePicks();
         const dimSet = this.settings.pathsCard.dimOthers.value;
         if (this.lastPathDimSetting !== null && dimSet !== this.lastPathDimSetting) this.pathDimOverride = null;
         this.lastPathDimSetting = dimSet;
@@ -267,7 +264,8 @@ export class Visual implements IVisual {
         this.catSel = this.catSel.map((v, k) => (this.catExact[k] && !this.catOptions[k].includes(v) ? "" : v));
         const gC = ["group1", "group2", "group3"].map(idx);
         const aC = idx("aisle");
-        const locC = idx("location");
+        const pcC = idx("pickCarton"), psC = idx("pickSeq");
+        this.pickRows = [];
         this.groupNames = gC.map((c) => (c >= 0 ? cols[c].displayName : ""));
         if (xC < 0 || yC < 0) return [];
 
@@ -326,7 +324,7 @@ export class Visual implements IVisual {
         // Tooltip toggle: only show fields from the Tooltips well (needs at least one field there).
         const onlyTipWell = this.settings.layoutCard.tipOnly.value && tipCols.length > 0;
 
-        return table.rows.map((r, i) => {
+        const all = table.rows.map((r, i) => {
             const pz = zC >= 0 ? az.f(r[zC]) : 0;
             return {
                 value: vC >= 0 && r[vC] != null ? Number(r[vC]) : null,
@@ -339,7 +337,7 @@ export class Visual implements IVisual {
                 cats: fC.map((c) => (c >= 0 && r[c] != null ? String(r[c]) : "")),
                 groups: gC.map((c) => (c >= 0 && r[c] != null ? String(r[c]) : "")),
                 aisle: aC >= 0 && r[aC] != null ? String(r[aC]) : "",
-                loc: locC >= 0 && r[locC] != null ? String(r[locC]).trim() : "",
+                loc: "",
                 tip: onlyTipWell
                     ? tipCols.map((c) => ({ displayName: cols[c].displayName, value: fmt(r[c]) }))
                     : [
@@ -354,6 +352,27 @@ export class Visual implements IVisual {
                 row: i,
             } as Cell;
         });
+
+        // With pick fields in play, a bin appears once per pick row: merge them into one cube and keep the picks.
+        if (pcC < 0) return all;
+        const byKey = new Map<string, Cell>();
+        const out: Cell[] = [];
+        all.forEach((c, i) => {
+            const key = `${c.px}|${c.py}|${c.pz}`;
+            let cell = byKey.get(key);
+            if (!cell) { cell = c; cell.loc = key; byKey.set(key, cell); out.push(cell); }
+            const r = table.rows[i];
+            if (r[pcC] != null && String(r[pcC]).trim() !== "") {
+                let seq = i;
+                if (psC >= 0 && r[psC] != null) {
+                    const v: any = r[psC];
+                    const n = v instanceof Date ? v.getTime() : Number(v);
+                    if (isFinite(n)) seq = n;
+                }
+                this.pickRows.push({ carton: String(r[pcC]).trim(), seq, loc: key });
+            }
+        });
+        return out;
     }
 
     // Thresholds come from the Color scale card (or auto-scale). The minimum is never below 0.
@@ -1153,30 +1172,13 @@ export class Visual implements IVisual {
     }
 
     // ---------- pick paths ----------
-    private parsePicks(pdv?: DataView): void {
+    private parsePicks(): void {
         this.pickData = new Map();
-        this.cartonIds = [];
-        const t = pdv?.table;
-        if (!t?.rows?.length) { this.selectedCartons = []; return; }
-        const cols = t.columns;
-        const ci = cols.findIndex((c) => c.roles?.pickCarton);
-        const si = cols.findIndex((c) => c.roles?.pickSeq);
-        const li = cols.findIndex((c) => c.roles?.pickLoc);
-        if (ci < 0 || li < 0) { this.selectedCartons = []; return; }
-        t.rows.forEach((r, n) => {
-            if (r[ci] == null || r[li] == null) return;
-            const carton = String(r[ci]).trim();
-            const loc = String(r[li]).trim();
-            let seq = n;
-            if (si >= 0 && r[si] != null) {
-                const v: any = r[si];
-                const num = v instanceof Date ? v.getTime() : Number(v);
-                if (isFinite(num)) seq = num;
-            }
-            let l = this.pickData.get(carton);
-            if (!l) { l = []; this.pickData.set(carton, l); }
-            l.push({ seq, loc });
-        });
+        for (const r of this.pickRows) {
+            let l = this.pickData.get(r.carton);
+            if (!l) { l = []; this.pickData.set(r.carton, l); }
+            l.push({ seq: r.seq, loc: r.loc });
+        }
         this.pickData.forEach((l) => l.sort((a, b) => a.seq - b.seq));
         this.cartonIds = Array.from(this.pickData.keys()).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
         this.selectedCartons = this.selectedCartons.filter((c) => this.pickData.has(c));
