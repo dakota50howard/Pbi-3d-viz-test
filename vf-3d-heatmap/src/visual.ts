@@ -964,52 +964,90 @@ export class Visual implements IVisual {
         this.rackMeshes = [];
     }
 
-    // One rack per aisle (one row of bins running along Y): posts at the bay breaks, and a beam + shelf at every level.
+    // Racking: each row of bins gets uprights at its bay breaks plus a beam (and optional shelf) at every level.
+    // Rows can run along X or Y, and a row is split into separate racks wherever there is a wide gap (a walkway).
     private buildRacking(): void {
         this.clearRacking();
         const mode = this.rackMode();
         if (mode === "off" || !this.cells.length) return;
         const rk = this.settings.rackCard;
+        const vis = this.cells.filter((c) => this.inLevel(c));
 
-        // group bins into racks: by the Aisle field, otherwise by X position
-        const racks = new Map<string, Cell[]>();
-        for (const c of this.cells) {
-            if (!this.inLevel(c)) continue;
-            const key = c.aisle !== "" ? "a:" + c.aisle : "x:" + c.px.toFixed(2);
-            const l = racks.get(key);
-            if (l) l.push(c); else racks.set(key, [c]);
+        // 1) group bins into rows: by the Aisle well, otherwise by whichever line (same X or same Y) holds more bins
+        const rows = new Map<string, Cell[]>();
+        const addTo = (k: string, c: Cell) => { const l = rows.get(k); if (l) l.push(c); else rows.set(k, [c]); };
+        if (vis.some((c) => c.aisle !== "")) {
+            for (const c of vis) addTo("a:" + c.aisle, c);
+        } else {
+            const nx = new Map<string, number>(), ny = new Map<string, number>();
+            for (const c of vis) {
+                const kx = c.px.toFixed(2), ky = c.py.toFixed(2);
+                nx.set(kx, (nx.get(kx) ?? 0) + 1);
+                ny.set(ky, (ny.get(ky) ?? 0) + 1);
+            }
+            for (const c of vis) {
+                const kx = c.px.toFixed(2), ky = c.py.toFixed(2);
+                if ((nx.get(kx) ?? 0) >= (ny.get(ky) ?? 0)) addTo("x:" + kx, c); else addTo("y:" + ky, c);
+            }
         }
 
-        const posts: number[][] = [];  // [x, yBottom, z, height]
-        const beams: number[][] = [];  // [x, y, zCentre, length]
-        const decks: number[][] = [];  // [x, y, zCentre, length, width]
-        const T = 0.11;                // post / beam thickness
-        const D = 0.06;                // shelf thickness
+        // 2) work out which way each row runs, then cut it into segments at walkways
+        const gapMax = Math.max(1.5, rk.walkGap.value);
+        const segments: { cells: Cell[]; alongX: boolean }[] = [];
+        rows.forEach((list) => {
+            let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+            for (const c of list) {
+                x0 = Math.min(x0, c.px); x1 = Math.max(x1, c.px);
+                y0 = Math.min(y0, c.py); y1 = Math.max(y1, c.py);
+            }
+            const alongX = x1 - x0 > y1 - y0;
+            const key = (c: Cell) => (alongX ? c.px : c.py);
+            const sorted = list.slice().sort((a, b) => key(a) - key(b));
+            let cur: Cell[] = [];
+            let last = -Infinity;
+            for (const c of sorted) {
+                const u = key(c);
+                if (cur.length && u - last > gapMax) { segments.push({ cells: cur, alongX }); cur = []; }
+                cur.push(c);
+                last = u;
+            }
+            if (cur.length) segments.push({ cells: cur, alongX });
+        });
+
+        const posts: number[][] = []; // [x, yBottom, z, height]
+        const beams: number[][] = []; // [x, y, z, sizeX, sizeZ]
+        const decks: number[][] = []; // [x, y, z, sizeX, sizeZ]
+        const T = 0.11;               // post / beam thickness
+        const D = 0.06;               // shelf thickness
         const bayLen = Math.max(0, rk.bayLength.value);
 
-        racks.forEach((list) => {
-            let sx = 0, minY = Infinity, maxY = -Infinity, bw = 0, topH = 0;
+        // 3) build each rack
+        for (const { cells: list, alongX } of segments) {
+            let sv = 0, u0 = Infinity, u1 = -Infinity, cross = 0;
             const lvls = new Map<number, number>(); // level position -> tallest bin on it
-            const ys = new Set<number>();
+            const us = new Set<number>();
             for (const c of list) {
-                sx += c.px;
-                minY = Math.min(minY, c.py - c.bd / 2);
-                maxY = Math.max(maxY, c.py + c.bd / 2);
-                bw = Math.max(bw, c.bw);
-                ys.add(c.py);
+                const u = alongX ? c.px : c.py;
+                const along = alongX ? c.bw : c.bd;
+                sv += alongX ? c.py : c.px;
+                u0 = Math.min(u0, u - along / 2);
+                u1 = Math.max(u1, u + along / 2);
+                cross = Math.max(cross, alongX ? c.bd : c.bw);
+                us.add(u);
                 lvls.set(c.pz, Math.max(lvls.get(c.pz) ?? 0, c.bh));
             }
-            const x = sx / list.length;
-            const half = bw / 2 + 0.07;
-            const start = minY - 0.05, end = maxY + 0.05;
-            const len = end - start, zc = (start + end) / 2;
+            const v = sv / list.length;
+            const half = cross / 2 + 0.07;
+            const start = u0 - 0.05, end = u1 + 0.05;
+            const len = end - start, uc = (start + end) / 2;
+            const at = (u: number, off: number): [number, number] => (alongX ? [u, v + off] : [v + off, u]);
 
-            // post positions along the aisle
+            // post positions along the rack
             const zs: number[] = [start];
             if (bayLen > 0) {
                 for (let z = start + bayLen; z < end - 0.01; z += bayLen) zs.push(z);
             } else {
-                const sorted = Array.from(ys).sort((a, b) => a - b);
+                const sorted = Array.from(us).sort((a, b) => a - b);
                 for (let i = 1; i < sorted.length; i++) {
                     if (sorted[i] - sorted[i - 1] > 1.5) zs.push((sorted[i] + sorted[i - 1]) / 2);
                 }
@@ -1019,20 +1057,26 @@ export class Visual implements IVisual {
             const levelPos = Array.from(lvls.keys()).sort((a, b) => a - b);
             const bottomY = levelPos[0] * this.lvl - this.cubeSize / 2 - D;
             const topPos = levelPos[levelPos.length - 1];
-            topH = lvls.get(topPos) ?? this.cubeSize;
-            const topY = topPos * this.lvl - this.cubeSize / 2 + topH + 0.15;
+            const topY = topPos * this.lvl - this.cubeSize / 2 + (lvls.get(topPos) ?? this.cubeSize) + 0.15;
 
-            for (const z of zs) {
-                posts.push([x - half, bottomY, z, topY - bottomY]);
-                posts.push([x + half, bottomY, z, topY - bottomY]);
+            for (const u of zs) {
+                for (const off of [-half, half]) {
+                    const [x, z] = at(u, off);
+                    posts.push([x, bottomY, z, topY - bottomY]);
+                }
             }
             for (const lp of levelPos) {
                 const y = lp * this.lvl - this.cubeSize / 2 - D / 2;
-                beams.push([x - half, y, zc, len]);
-                beams.push([x + half, y, zc, len]);
-                if (mode === "shelves") decks.push([x, y, zc, len, half * 2]);
+                for (const off of [-half, half]) {
+                    const [x, z] = at(uc, off);
+                    beams.push([x, y, z, alongX ? len : T, alongX ? T : len]);
+                }
+                if (mode === "shelves") {
+                    const [x, z] = at(uc, 0);
+                    decks.push([x, y, z, alongX ? len : half * 2, alongX ? half * 2 : len]);
+                }
             }
-        });
+        }
 
         const make = (n: number, color: string, opacity: number): THREE.InstancedMesh | null => {
             if (!n) return null;
@@ -1055,9 +1099,9 @@ export class Visual implements IVisual {
         const pm = make(posts.length, rk.uprightColor.value.value, 1);
         posts.forEach((p, i) => put(pm!, i, p[0], p[1] + p[3] / 2, p[2], T, p[3], T));
         const bm = make(beams.length, rk.beamColor.value.value, 1);
-        beams.forEach((b, i) => put(bm!, i, b[0], b[1], b[2], T, T * 0.9, b[3]));
+        beams.forEach((b, i) => put(bm!, i, b[0], b[1], b[2], b[3], T * 0.9, b[4]));
         const dm = make(decks.length, rk.shelfColor.value.value, Math.min(1, Math.max(0.05, rk.shelfOpacity.value)));
-        decks.forEach((d, i) => put(dm!, i, d[0], d[1], d[2], d[4], 0.05, d[3]));
+        decks.forEach((d, i) => put(dm!, i, d[0], d[1], d[2], d[3], 0.05, d[4]));
         for (const m of this.rackMeshes) m.instanceMatrix.needsUpdate = true;
     }
 

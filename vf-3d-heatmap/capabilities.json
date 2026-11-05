@@ -471,6 +471,11 @@
               }
             }
           }
+        },
+        "walkGap": {
+          "type": {
+            "numeric": true
+          }
         }
       }
     }

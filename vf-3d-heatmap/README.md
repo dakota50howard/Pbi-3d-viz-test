@@ -39,6 +39,6 @@ The View card's Group labels section has a Cards / Colors switch for viewers. Th
 
 ## Racking
 Put the aisle number in the "Aisle (for racking)" well (without it, bins sharing an X position are treated as one rack).
-Each aisle gets uprights at the bay breaks plus a beam and a shelf at every level. The View card has an Off / Frame /
+Each row of bins (running along X or Y, detected automatically) gets uprights at the bay breaks plus a beam and a shelf at every level. A row is split into separate racks wherever there is a gap wider than the walkway setting. The View card has an Off / Frame /
 Shelves switch; the Racking card sets the default, shelf opacity, colors, and a fixed bay length if the automatic bay
 detection places posts oddly.
