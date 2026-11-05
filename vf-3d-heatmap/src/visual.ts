@@ -264,7 +264,7 @@ export class Visual implements IVisual {
         this.catSel = this.catSel.map((v, k) => (this.catExact[k] && !this.catOptions[k].includes(v) ? "" : v));
         const gC = ["group1", "group2", "group3"].map(idx);
         const aC = idx("aisle");
-        const pcC = idx("pickCarton"), psC = idx("pickSeq");
+        const pcC = idx("picks");
         this.pickRows = [];
         this.groupNames = gC.map((c) => (c >= 0 ? cols[c].displayName : ""));
         if (xC < 0 || yC < 0) return [];
@@ -353,26 +353,22 @@ export class Visual implements IVisual {
             } as Cell;
         });
 
-        // With pick fields in play, a bin appears once per pick row: merge them into one cube and keep the picks.
-        if (pcC < 0) return all;
-        const byKey = new Map<string, Cell>();
-        const out: Cell[] = [];
-        all.forEach((c, i) => {
-            const key = `${c.px}|${c.py}|${c.pz}`;
-            let cell = byKey.get(key);
-            if (!cell) { cell = c; cell.loc = key; byKey.set(key, cell); out.push(cell); }
-            const r = table.rows[i];
-            if (r[pcC] != null && String(r[pcC]).trim() !== "") {
-                let seq = i;
-                if (psC >= 0 && r[psC] != null) {
-                    const v: any = r[psC];
-                    const n = v instanceof Date ? v.getTime() : Number(v);
-                    if (isFinite(n)) seq = n;
-                }
-                this.pickRows.push({ carton: String(r[pcC]).trim(), seq, loc: key });
-            }
-        });
-        return out;
+        // Picks arrive as one text value per bin: "carton~sequence;carton~sequence;..."
+        if (pcC >= 0) {
+            all.forEach((c, i) => {
+                c.loc = `${c.px}|${c.py}|${c.pz}`;
+                const raw = table.rows[i][pcC];
+                if (raw == null || raw === "") return;
+                String(raw).split(";").forEach((part, k) => {
+                    const cut = part.lastIndexOf("~");
+                    const carton = (cut >= 0 ? part.slice(0, cut) : part).trim();
+                    if (!carton) return;
+                    const n = cut >= 0 ? Number(part.slice(cut + 1)) : NaN;
+                    this.pickRows.push({ carton, seq: isFinite(n) ? n : i * 1000 + k, loc: c.loc });
+                });
+            });
+        }
+        return all;
     }
 
     // Thresholds come from the Color scale card (or auto-scale). The minimum is never below 0.

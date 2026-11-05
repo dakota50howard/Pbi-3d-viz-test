@@ -82,14 +82,9 @@
       "kind": "GroupingOrMeasure"
     },
     {
-      "name": "pickCarton",
-      "displayName": "Carton (pick paths)",
-      "kind": "Grouping"
-    },
-    {
-      "name": "pickSeq",
-      "displayName": "Pick sequence (pick paths)",
-      "kind": "GroupingOrMeasure"
+      "name": "picks",
+      "displayName": "Picks measure (pick paths)",
+      "kind": "Measure"
     }
   ],
   "dataViewMappings": [
@@ -174,17 +169,12 @@
             },
             {
               "for": {
-                "in": "pickCarton"
-              }
-            },
-            {
-              "for": {
-                "in": "pickSeq"
-              }
-            },
-            {
-              "for": {
                 "in": "tooltips"
+              }
+            },
+            {
+              "for": {
+                "in": "picks"
               }
             }
           ],
