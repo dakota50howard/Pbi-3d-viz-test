@@ -42,3 +42,8 @@ Put the aisle number in the "Aisle (for racking)" well (without it, bins sharing
 Each row of bins (running along X or Y, detected automatically) gets uprights at the bay breaks plus a beam and a shelf at every level. A row is split into separate racks wherever there is a gap wider than the walkway setting. The View card has an Off / Frame /
 Shelves switch; the Racking card sets the default, shelf opacity, colors, and a fixed bay length if the automatic bay
 detection places posts oddly.
+
+## Pick paths (experimental branch)
+Fill the three Pick wells from a query with one row per pick: Carton, Pick sequence, Pick location. Also put the bin's
+code (the same value as Pick location, e.g. ACLBCD) in the "Location ID (for pick paths)" well. Use the Pick paths card
+(bottom right) to add up to a few cartons; each gets a colored, numbered route that follows the aisles around the racking.

@@ -1,7 +1,7 @@
 import powerbi from "powerbi-visuals-api";
 import { formattingSettings } from "powerbi-visuals-utils-formattingmodel";
 
-const { SimpleCard, Model, NumUpDown, ColorPicker, ToggleSwitch, TextArea } = formattingSettings;
+const { SimpleCard, Model, NumUpDown, ColorPicker, ToggleSwitch, TextArea, TextInput } = formattingSettings;
 
 class ScaleCard extends SimpleCard {
     name = "scale";
@@ -75,6 +75,20 @@ class RackCard extends SimpleCard {
     slices = [this.showRacking, this.showShelves, this.shelfOpacity, this.bayLength, this.walkGap, this.uprightColor, this.beamColor, this.shelfColor];
 }
 
+class PathsCard extends SimpleCard {
+    name = "paths";
+    displayName = "Pick paths";
+
+    showPaths = new ToggleSwitch({ name: "showPaths", displayName: "Show pick paths", value: true });
+    maxCartons = new NumUpDown({ name: "maxCartons", displayName: "Cartons shown at once (1 - 8)", value: 5 });
+    dimOthers = new ToggleSwitch({ name: "dimOthers", displayName: "Dim bins that are not picked", value: true });
+    lineSize = new NumUpDown({ name: "lineSize", displayName: "Path thickness", value: 0.14 });
+    unitsPerCell = new NumUpDown({ name: "unitsPerCell", displayName: "Distance per cell (for the estimate)", value: 1 });
+    distanceUnit = new TextInput({ name: "distanceUnit", displayName: "Distance unit name", value: "cells", placeholder: "cells, ft, m" });
+
+    slices = [this.showPaths, this.maxCartons, this.dimOthers, this.lineSize, this.unitsPerCell, this.distanceUnit];
+}
+
 class LayoutCard extends SimpleCard {
     name = "layout";
     displayName = "Layout";
@@ -103,6 +117,7 @@ export class VisualFormattingSettingsModel extends Model {
     textCard = new TextCard();
     labelsCard = new LabelsCard();
     rackCard = new RackCard();
+    pathsCard = new PathsCard();
     layoutCard = new LayoutCard();
-    cards = [this.scaleCard, this.textCard, this.labelsCard, this.rackCard, this.layoutCard];
+    cards = [this.scaleCard, this.textCard, this.labelsCard, this.rackCard, this.pathsCard, this.layoutCard];
 }

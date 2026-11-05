@@ -97,4 +97,35 @@
             .hm-lvlout { width: 2.545em; text-align: right; color: #777; }
         }
     }
+
+    .hm-paths {
+        position: absolute; right: 0.727em; bottom: 0.727em;
+        width: 19em; padding: 0.909em 1.091em;
+        background: #fff; border-radius: 0.727em;
+        box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
+        font-size: var(--hm-fs, 11px); color: #333;
+
+        .hm-ptitle { font-weight: 600; margin-bottom: 0.545em; }
+        .hm-psearch { position: relative;
+            input { width: 100%; box-sizing: border-box; padding: 0.364em 0.545em; font-size: 1em;
+                border: 1px solid #c8ccd2; border-radius: 0.364em; background: #fff; color: #333; }
+            .hm-plist { display: none; position: absolute; left: 0; right: 0; bottom: 100%; z-index: 5; margin-bottom: 0.2em;
+                max-height: 15em; overflow-y: auto; background: #fff; border: 1px solid #c8ccd2;
+                border-radius: 0.364em; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+                div { padding: 0.364em 0.545em; cursor: pointer; &:hover { background: #e3ecf8; } }
+                .hm-more { color: #888; cursor: default; &:hover { background: transparent; } }
+            }
+        }
+        .hm-chip { display: flex; align-items: flex-start; margin-top: 0.6em; gap: 0.5em;
+            .hm-swatch { width: 0.818em; height: 0.818em; border-radius: 0.182em; margin-top: 0.25em; flex: none; }
+            .hm-chipbody { flex: 1; min-width: 0; }
+            .hm-chipname { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .hm-chipinfo { color: #777; }
+            .hm-chipx { border: 0; background: transparent; color: #888; font-size: 1.3em; line-height: 1; cursor: pointer; padding: 0 0.2em; }
+        }
+        .hm-pfoot { display: flex; align-items: center; justify-content: space-between; margin-top: 0.7em; color: #555;
+            .hm-btn { padding: 0.25em 0.9em; font-size: 1em; cursor: pointer; border: 1px solid #c8ccd2; border-radius: 0.364em; background: #fff; color: #333;
+                &:hover { background: #e3ecf8; } }
+        }
+    }
 }

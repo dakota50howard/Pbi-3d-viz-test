@@ -15,6 +15,14 @@ import VisualConstructorOptions = powerbi.extensibility.visual.VisualConstructor
 import DataView = powerbi.DataView;
 
 interface Tick { pos: number; label: string; }
+interface PSeg { x0: number; x1: number; z0: number; z1: number; elev: number; alongX: boolean; v: number; half: number; }
+interface PGrid {
+    gs: number; ox: number; oz: number; w: number; h: number;
+    blocked: Uint8Array; segs: PSeg[];
+    stamp: Int32Array; done: Int32Array; g: Float32Array; from: Int32Array; dir: Int8Array; cur: number;
+}
+interface PathStop { ci: number; n: number; stand: [number, number]; elev: number; }
+interface PathRoute { carton: string; color: THREE.Color; stops: PathStop[]; lines: { a: THREE.Vector3; b: THREE.Vector3 }[]; dist: number; missing: number; }
 interface GroupLabel { sprite: THREE.Sprite; }
 interface Scale { low: number; med: number; high: number; crit: number; }
 type ViewKind = "plan" | "front" | "side" | "iso";
@@ -28,6 +36,8 @@ interface Cell {
     cats: string[];
     groups: string[];
     aisle: string;
+    loc: string;
+    rack?: number;
     tip: { displayName: string; value: string }[];
     row: number;
     id?: ISelectionId;
@@ -52,6 +62,20 @@ export class Visual implements IVisual {
     private autoColors = new Map<string, THREE.Color>();
     private styleOverride: boolean | null = null; // viewer's Cards / Colors choice
     private rackMeshes: THREE.InstancedMesh[] = [];
+
+    // pick paths
+    private pathEl: HTMLElement;
+    private pickData = new Map<string, { seq: number; loc: string }[]>();
+    private cartonIds: string[] = [];
+    private selectedCartons: string[] = [];
+    private routes: PathRoute[] = [];
+    private pickedCells = new Set<number>();
+    private pathMesh?: THREE.InstancedMesh;
+    private pathSprites: THREE.Sprite[] = [];
+    private pathDimOverride: boolean | null = null;
+    private lastPathDimSetting: boolean | null = null;
+    private locIndex = new Map<string, number>();
+    private grid?: PGrid;
     private rackOverride: "off" | "frame" | "shelves" | null = null; // viewer's racking choice
     private lastRackKey = "";
     private lastStyleSetting: boolean | null = null;
@@ -135,6 +159,10 @@ export class Visual implements IVisual {
         this.viewEl.className = "hm-view";
         this.root.appendChild(this.viewEl);
 
+        this.pathEl = document.createElement("div");
+        this.pathEl.className = "hm-paths";
+        this.root.appendChild(this.pathEl);
+
         const el = this.renderer.domElement;
         el.addEventListener("pointerdown", (e) => { this.downPos = { x: e.clientX, y: e.clientY }; });
         el.addEventListener("pointerup", (e) => this.onClick(e));
@@ -145,7 +173,11 @@ export class Visual implements IVisual {
     }
 
     public update(options: VisualUpdateOptions): void {
-        const dv = options.dataViews?.[0];
+        // The visual can receive two data views: the bins, and (optionally) the pick steps. Tell them apart by their roles.
+        const dvs = options.dataViews ?? [];
+        const isPick = (d: DataView) => !!d.table?.columns?.some((c) => c.roles && (c.roles.pickCarton || c.roles.pickLoc || c.roles.pickSeq));
+        const dv = dvs.find((d) => !isPick(d));
+        const pdv = dvs.find(isPick);
         this.settings = this.fmtService.populateFormattingSettingsModel(VisualFormattingSettingsModel, dv);
 
         const { width, height } = options.viewport;
@@ -163,7 +195,7 @@ export class Visual implements IVisual {
         const MAX_ROWS = 100000;
         const loaded = dv?.table?.rows?.length ?? 0;
         this.truncated = false;
-        if (dv?.metadata?.segment) {
+        if (dv?.metadata?.segment || pdv?.metadata?.segment) {
             if (loaded < MAX_ROWS && this.host.fetchMoreData(true)) {
                 this.emptyMsg.textContent = `Loading bins... ${loaded.toLocaleString()} so far`;
                 this.emptyMsg.style.display = "flex";
@@ -174,6 +206,11 @@ export class Visual implements IVisual {
         this.emptyMsg.textContent = this.emptyText;
 
         this.cells = this.parse(dv);
+        this.grid = undefined;
+        this.parsePicks(pdv);
+        const dimSet = this.settings.pathsCard.dimOthers.value;
+        if (this.lastPathDimSetting !== null && dimSet !== this.lastPathDimSetting) this.pathDimOverride = null;
+        this.lastPathDimSetting = dimSet;
         const def = this.settings.labelsCard.colorGroups.value;
         if (this.lastStyleSetting !== null && def !== this.lastStyleSetting) this.styleOverride = null;
         this.lastStyleSetting = def;
@@ -189,6 +226,7 @@ export class Visual implements IVisual {
         this.buildFilterPanel();
         this.buildViewPanel();
         this.buildLegend();
+        this.rebuildPaths();
         this.draw();
     }
 
@@ -229,6 +267,7 @@ export class Visual implements IVisual {
         this.catSel = this.catSel.map((v, k) => (this.catExact[k] && !this.catOptions[k].includes(v) ? "" : v));
         const gC = ["group1", "group2", "group3"].map(idx);
         const aC = idx("aisle");
+        const locC = idx("location");
         this.groupNames = gC.map((c) => (c >= 0 ? cols[c].displayName : ""));
         if (xC < 0 || yC < 0) return [];
 
@@ -300,6 +339,7 @@ export class Visual implements IVisual {
                 cats: fC.map((c) => (c >= 0 && r[c] != null ? String(r[c]) : "")),
                 groups: gC.map((c) => (c >= 0 && r[c] != null ? String(r[c]) : "")),
                 aisle: aC >= 0 && r[aC] != null ? String(r[aC]) : "",
+                loc: locC >= 0 && r[locC] != null ? String(r[locC]).trim() : "",
                 tip: onlyTipWell
                     ? tipCols.map((c) => ({ displayName: cols[c].displayName, value: fmt(r[c]) }))
                     : [
@@ -580,9 +620,11 @@ export class Visual implements IVisual {
         const picked = this.selection.getSelectionIds() as ISelectionId[];
         const dim = new THREE.Color(0xd5d8dc);
         const byGroup = this.colorByGroup();
+        const pathDim = this.pickedCells.size > 0 && (this.pathDimOverride ?? this.settings.pathsCard.dimOthers.value);
         this.cells.forEach((c, i) => {
             const col = (byGroup ? this.groupColorFor(c) : null) ?? this.colorFor(c.value);
             if ((picked.length && !picked.some((p) => p.equals(this.idFor(c)))) || !this.matches(c)) col.lerp(dim, 0.8);
+            else if (pathDim && !this.pickedCells.has(i)) col.lerp(dim, 0.8);
             this.mesh!.setColorAt(i, col);
         });
         if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
@@ -947,6 +989,52 @@ export class Visual implements IVisual {
         }
     }
 
+    // Group bins into rows (by the Aisle well, else by whichever line holds more bins), work out which way each row runs,
+    // and cut it into separate racks wherever there is a wide gap (a walkway).
+    private rackSegments(vis: Cell[]): { cells: Cell[]; alongX: boolean }[] {
+        const rk = this.settings.rackCard;
+        const rows = new Map<string, Cell[]>();
+        const addTo = (k: string, c: Cell) => { const l = rows.get(k); if (l) l.push(c); else rows.set(k, [c]); };
+        if (vis.some((c) => c.aisle !== "")) {
+            for (const c of vis) addTo("a:" + c.aisle, c);
+        } else {
+            const nx = new Map<string, number>(), ny = new Map<string, number>();
+            for (const c of vis) {
+                const kx = c.px.toFixed(2), ky = c.py.toFixed(2);
+                nx.set(kx, (nx.get(kx) ?? 0) + 1);
+                ny.set(ky, (ny.get(ky) ?? 0) + 1);
+            }
+            for (const c of vis) {
+                const kx = c.px.toFixed(2), ky = c.py.toFixed(2);
+                if ((nx.get(kx) ?? 0) >= (ny.get(ky) ?? 0)) addTo("x:" + kx, c); else addTo("y:" + ky, c);
+            }
+        }
+
+        const gapMax = Math.max(1.5, rk.walkGap.value);
+        const segments: { cells: Cell[]; alongX: boolean }[] = [];
+        rows.forEach((list) => {
+            let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+            for (const c of list) {
+                x0 = Math.min(x0, c.px); x1 = Math.max(x1, c.px);
+                y0 = Math.min(y0, c.py); y1 = Math.max(y1, c.py);
+            }
+            const alongX = x1 - x0 > y1 - y0;
+            const key = (c: Cell) => (alongX ? c.px : c.py);
+            const sorted = list.slice().sort((a, b) => key(a) - key(b));
+            let cur: Cell[] = [];
+            let last = -Infinity;
+            for (const c of sorted) {
+                const u = key(c);
+                if (cur.length && u - last > gapMax) { segments.push({ cells: cur, alongX }); cur = []; }
+                cur.push(c);
+                last = u;
+            }
+            if (cur.length) segments.push({ cells: cur, alongX });
+        });
+
+        return segments;
+    }
+
     // ---------- racking ----------
     private rackMode(): "off" | "frame" | "shelves" {
         if (this.rackOverride) return this.rackOverride;
@@ -971,48 +1059,7 @@ export class Visual implements IVisual {
         const mode = this.rackMode();
         if (mode === "off" || !this.cells.length) return;
         const rk = this.settings.rackCard;
-        const vis = this.cells.filter((c) => this.inLevel(c));
-
-        // 1) group bins into rows: by the Aisle well, otherwise by whichever line (same X or same Y) holds more bins
-        const rows = new Map<string, Cell[]>();
-        const addTo = (k: string, c: Cell) => { const l = rows.get(k); if (l) l.push(c); else rows.set(k, [c]); };
-        if (vis.some((c) => c.aisle !== "")) {
-            for (const c of vis) addTo("a:" + c.aisle, c);
-        } else {
-            const nx = new Map<string, number>(), ny = new Map<string, number>();
-            for (const c of vis) {
-                const kx = c.px.toFixed(2), ky = c.py.toFixed(2);
-                nx.set(kx, (nx.get(kx) ?? 0) + 1);
-                ny.set(ky, (ny.get(ky) ?? 0) + 1);
-            }
-            for (const c of vis) {
-                const kx = c.px.toFixed(2), ky = c.py.toFixed(2);
-                if ((nx.get(kx) ?? 0) >= (ny.get(ky) ?? 0)) addTo("x:" + kx, c); else addTo("y:" + ky, c);
-            }
-        }
-
-        // 2) work out which way each row runs, then cut it into segments at walkways
-        const gapMax = Math.max(1.5, rk.walkGap.value);
-        const segments: { cells: Cell[]; alongX: boolean }[] = [];
-        rows.forEach((list) => {
-            let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-            for (const c of list) {
-                x0 = Math.min(x0, c.px); x1 = Math.max(x1, c.px);
-                y0 = Math.min(y0, c.py); y1 = Math.max(y1, c.py);
-            }
-            const alongX = x1 - x0 > y1 - y0;
-            const key = (c: Cell) => (alongX ? c.px : c.py);
-            const sorted = list.slice().sort((a, b) => key(a) - key(b));
-            let cur: Cell[] = [];
-            let last = -Infinity;
-            for (const c of sorted) {
-                const u = key(c);
-                if (cur.length && u - last > gapMax) { segments.push({ cells: cur, alongX }); cur = []; }
-                cur.push(c);
-                last = u;
-            }
-            if (cur.length) segments.push({ cells: cur, alongX });
-        });
+        const segments = this.rackSegments(this.cells.filter((c) => this.inLevel(c)));
 
         const posts: number[][] = []; // [x, yBottom, z, height]
         const beams: number[][] = []; // [x, y, z, sizeX, sizeZ]
@@ -1103,6 +1150,441 @@ export class Visual implements IVisual {
         const dm = make(decks.length, rk.shelfColor.value.value, Math.min(1, Math.max(0.05, rk.shelfOpacity.value)));
         decks.forEach((d, i) => put(dm!, i, d[0], d[1], d[2], d[3], 0.05, d[4]));
         for (const m of this.rackMeshes) m.instanceMatrix.needsUpdate = true;
+    }
+
+    // ---------- pick paths ----------
+    private parsePicks(pdv?: DataView): void {
+        this.pickData = new Map();
+        this.cartonIds = [];
+        const t = pdv?.table;
+        if (!t?.rows?.length) { this.selectedCartons = []; return; }
+        const cols = t.columns;
+        const ci = cols.findIndex((c) => c.roles?.pickCarton);
+        const si = cols.findIndex((c) => c.roles?.pickSeq);
+        const li = cols.findIndex((c) => c.roles?.pickLoc);
+        if (ci < 0 || li < 0) { this.selectedCartons = []; return; }
+        t.rows.forEach((r, n) => {
+            if (r[ci] == null || r[li] == null) return;
+            const carton = String(r[ci]).trim();
+            const loc = String(r[li]).trim();
+            let seq = n;
+            if (si >= 0 && r[si] != null) {
+                const v: any = r[si];
+                const num = v instanceof Date ? v.getTime() : Number(v);
+                if (isFinite(num)) seq = num;
+            }
+            let l = this.pickData.get(carton);
+            if (!l) { l = []; this.pickData.set(carton, l); }
+            l.push({ seq, loc });
+        });
+        this.pickData.forEach((l) => l.sort((a, b) => a.seq - b.seq));
+        this.cartonIds = Array.from(this.pickData.keys()).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        this.selectedCartons = this.selectedCartons.filter((c) => this.pickData.has(c));
+    }
+
+    // Walkable floor: every rack is an obstacle on a grid, so paths follow the aisles and never cut through racking.
+    private ensureGrid(): PGrid {
+        if (this.grid) return this.grid;
+        const ps: PSeg[] = [];
+        for (const { cells: list, alongX } of this.rackSegments(this.cells)) {
+            let sv = 0, u0 = Infinity, u1 = -Infinity, cross = 0, minPz = Infinity;
+            for (const c of list) {
+                const u = alongX ? c.px : c.py;
+                const along = alongX ? c.bw : c.bd;
+                sv += alongX ? c.py : c.px;
+                u0 = Math.min(u0, u - along / 2);
+                u1 = Math.max(u1, u + along / 2);
+                cross = Math.max(cross, alongX ? c.bd : c.bw);
+                minPz = Math.min(minPz, c.pz);
+                c.rack = ps.length;
+            }
+            const v = sv / list.length, half = cross / 2 + 0.07;
+            const start = u0 - 0.05, end = u1 + 0.05;
+            const elev = minPz * this.lvl - this.cubeSize / 2;
+            ps.push(alongX
+                ? { x0: start, x1: end, z0: v - half, z1: v + half, elev, alongX, v, half }
+                : { x0: v - half, x1: v + half, z0: start, z1: end, elev, alongX, v, half });
+        }
+        let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+        for (const q of ps) {
+            minX = Math.min(minX, q.x0); maxX = Math.max(maxX, q.x1);
+            minZ = Math.min(minZ, q.z0); maxZ = Math.max(maxZ, q.z1);
+        }
+        if (!ps.length) { minX = 0; maxX = 1; minZ = 0; maxZ = 1; }
+        minX -= 4; minZ -= 4; maxX += 4; maxZ += 4;
+        const gs = Math.max(0.5, Math.max(maxX - minX, maxZ - minZ) / 700);
+        const w = Math.ceil((maxX - minX) / gs) + 1, h = Math.ceil((maxZ - minZ) / gs) + 1;
+        const blocked = new Uint8Array(w * h);
+        for (const q of ps) {
+            const ix0 = Math.max(0, Math.round((q.x0 - minX) / gs)), ix1 = Math.min(w - 1, Math.round((q.x1 - minX) / gs));
+            const iz0 = Math.max(0, Math.round((q.z0 - minZ) / gs)), iz1 = Math.min(h - 1, Math.round((q.z1 - minZ) / gs));
+            for (let iz = iz0; iz <= iz1; iz++) for (let ix = ix0; ix <= ix1; ix++) blocked[iz * w + ix] = 1;
+        }
+        this.grid = {
+            gs, ox: minX, oz: minZ, w, h, blocked, segs: ps,
+            stamp: new Int32Array(w * h), done: new Int32Array(w * h), g: new Float32Array(w * h),
+            from: new Int32Array(w * h), dir: new Int8Array(w * h), cur: 0,
+        };
+        return this.grid;
+    }
+
+    private node(G: PGrid, x: number, z: number): number {
+        const ix = Math.min(G.w - 1, Math.max(0, Math.round((x - G.ox) / G.gs)));
+        const iz = Math.min(G.h - 1, Math.max(0, Math.round((z - G.oz) / G.gs)));
+        return iz * G.w + ix;
+    }
+
+    private nodeXY(G: PGrid, id: number): [number, number] {
+        return [G.ox + (id % G.w) * G.gs, G.oz + Math.floor(id / G.w) * G.gs];
+    }
+
+    // Where the picker stands: in the aisle, level with the bin, on the side nearest the previous stop.
+    private standPoint(c: Cell, prev?: [number, number]): [number, number] {
+        const G = this.ensureGrid();
+        const seg = c.rack != null ? G.segs[c.rack] : undefined;
+        if (seg) {
+            const off = seg.half + G.gs * 0.75;
+            const cand: [number, number][] = seg.alongX
+                ? [[c.px, seg.v - off], [c.px, seg.v + off]]
+                : [[seg.v - off, c.py], [seg.v + off, c.py]];
+            const ok = cand.filter(([x, z]) => !G.blocked[this.node(G, x, z)]);
+            if (ok.length) {
+                if (prev && ok.length > 1) {
+                    const d = (p: [number, number]) => Math.abs(p[0] - prev[0]) + Math.abs(p[1] - prev[1]);
+                    ok.sort((a, b) => d(a) - d(b));
+                }
+                return this.nodeXY(G, this.node(G, ok[0][0], ok[0][1]));
+            }
+        }
+        // fallback: the nearest free spot, searching outwards in rings
+        const home = this.node(G, c.px, c.py);
+        const hx = home % G.w, hz = Math.floor(home / G.w);
+        for (let r = 1; r < 80; r++) {
+            let best = -1, bd = Infinity;
+            for (let dz = -r; dz <= r; dz++) {
+                for (let dx = -r; dx <= r; dx++) {
+                    if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+                    const x = hx + dx, z = hz + dz;
+                    if (x < 0 || z < 0 || x >= G.w || z >= G.h || G.blocked[z * G.w + x]) continue;
+                    const d = dx * dx + dz * dz;
+                    if (d < bd) { bd = d; best = z * G.w + x; }
+                }
+            }
+            if (best >= 0) return this.nodeXY(G, best);
+        }
+        return [c.px, c.py];
+    }
+
+    // A* over the walkable grid (4-way, like walking along aisles), with a small penalty for turning.
+    private aStar(s: number, t: number): number[] | null {
+        const G = this.grid!;
+        if (s === t) return [s];
+        const { w, h, blocked } = G;
+        const cur = ++G.cur;
+        const ids: number[] = [], fs: number[] = [];
+        const push = (id: number, f: number) => {
+            let i = ids.length;
+            ids.push(id); fs.push(f);
+            while (i > 0) {
+                const par = (i - 1) >> 1;
+                if (fs[par] <= fs[i]) break;
+                [ids[par], ids[i]] = [ids[i], ids[par]];
+                [fs[par], fs[i]] = [fs[i], fs[par]];
+                i = par;
+            }
+        };
+        const pop = (): number => {
+            const top = ids[0];
+            const lastId = ids.pop()!, lastF = fs.pop()!;
+            if (ids.length) {
+                ids[0] = lastId; fs[0] = lastF;
+                let i = 0;
+                for (;;) {
+                    const l = 2 * i + 1, r = l + 1;
+                    let m = i;
+                    if (l < ids.length && fs[l] < fs[m]) m = l;
+                    if (r < ids.length && fs[r] < fs[m]) m = r;
+                    if (m === i) break;
+                    [ids[m], ids[i]] = [ids[i], ids[m]];
+                    [fs[m], fs[i]] = [fs[i], fs[m]];
+                    i = m;
+                }
+            }
+            return top;
+        };
+        const tx = t % w, tz = Math.floor(t / w);
+        const DX = [1, -1, 0, 0], DZ = [0, 0, 1, -1];
+        G.stamp[s] = cur; G.g[s] = 0; G.from[s] = -1; G.dir[s] = -1;
+        push(s, Math.abs(s % w - tx) + Math.abs(Math.floor(s / w) - tz));
+        let guard = 0;
+        while (ids.length && guard++ < 600000) {
+            const id = pop();
+            if (G.done[id] === cur) continue;
+            G.done[id] = cur;
+            if (id === t) {
+                const out: number[] = [];
+                for (let n = t; n !== -1; n = G.from[n]) out.push(n);
+                return out.reverse();
+            }
+            const x = id % w, z = Math.floor(id / w);
+            for (let d = 0; d < 4; d++) {
+                const nx = x + DX[d], nz = z + DZ[d];
+                if (nx < 0 || nz < 0 || nx >= w || nz >= h) continue;
+                const nid = nz * w + nx;
+                if (blocked[nid] && nid !== t) continue;
+                const ng = G.g[id] + 1 + (G.dir[id] >= 0 && G.dir[id] !== d ? 0.25 : 0);
+                if (G.stamp[nid] !== cur || ng < G.g[nid]) {
+                    G.stamp[nid] = cur; G.g[nid] = ng; G.from[nid] = id; G.dir[nid] = d;
+                    push(nid, ng + Math.abs(nx - tx) + Math.abs(nz - tz));
+                }
+            }
+        }
+        return null;
+    }
+
+    // World points from one stand point to the next, keeping only the corners.
+    private routeBetween(a: [number, number], b: [number, number]): [number, number][] {
+        const G = this.ensureGrid();
+        const path = this.aStar(this.node(G, a[0], a[1]), this.node(G, b[0], b[1]));
+        if (!path) return [a, b]; // no walkable route found: draw a straight line
+        const pts = path.map((id) => this.nodeXY(G, id));
+        const out: [number, number][] = [pts[0]];
+        for (let i = 1; i < pts.length - 1; i++) {
+            const p = pts[i - 1], q = pts[i], r = pts[i + 1];
+            if (Math.abs((q[0] - p[0]) * (r[1] - q[1]) - (q[1] - p[1]) * (r[0] - q[0])) > 1e-6) out.push(q);
+        }
+        out.push(pts[pts.length - 1]);
+        return out;
+    }
+
+    private computePaths(): void {
+        this.routes = [];
+        this.pickedCells = new Set();
+        const pc = this.settings.pathsCard;
+        if (!pc.showPaths.value || !this.selectedCartons.length || !this.cells.length) return;
+        this.locIndex = new Map();
+        this.cells.forEach((c, i) => { if (c.loc && !this.locIndex.has(c.loc)) this.locIndex.set(c.loc, i); });
+        if (!this.locIndex.size) return;
+        const G = this.ensureGrid();
+        const palette = ["#E63946", "#2A7DE1", "#2A9D8F", "#F4A261", "#8E44AD", "#E91E63", "#00897B", "#6D4C41"];
+        const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+
+        this.selectedCartons.forEach((carton, k) => {
+            const color = new THREE.Color(palette[k % palette.length]);
+            const stops: PathStop[] = [];
+            let missing = 0;
+            let prev: [number, number] | undefined;
+            for (const st of this.pickData.get(carton) ?? []) {
+                const ci = this.locIndex.get(st.loc);
+                if (ci == null) { missing++; continue; }
+                const c = this.cells[ci];
+                const stand = this.standPoint(c, prev);
+                prev = stand;
+                const seg = c.rack != null ? G.segs[c.rack] : undefined;
+                stops.push({ ci, n: stops.length + 1, stand, elev: seg ? seg.elev : c.pz * this.lvl - this.cubeSize / 2 });
+                this.pickedCells.add(ci);
+            }
+            const lines: { a: THREE.Vector3; b: THREE.Vector3 }[] = [];
+            let dist = 0;
+            const lift = 0.12;
+            stops.forEach((a, i) => {
+                const c = this.cells[a.ci];
+                const binY = c.pz * this.lvl - this.cubeSize / 2 + c.bh / 2;
+                lines.push({ a: V(a.stand[0], a.elev + lift, a.stand[1]), b: V(a.stand[0], binY, a.stand[1]) }); // reach up to the bin
+                lines.push({ a: V(a.stand[0], binY, a.stand[1]), b: V(c.px, binY, c.py) });
+                if (i + 1 < stops.length) {
+                    const b = stops[i + 1];
+                    const pts = this.routeBetween(a.stand, b.stand);
+                    for (let j = 0; j + 1 < pts.length; j++) {
+                        lines.push({ a: V(pts[j][0], a.elev + lift, pts[j][1]), b: V(pts[j + 1][0], a.elev + lift, pts[j + 1][1]) });
+                        dist += Math.abs(pts[j + 1][0] - pts[j][0]) + Math.abs(pts[j + 1][1] - pts[j][1]);
+                    }
+                    if (Math.abs(b.elev - a.elev) > 0.01) {
+                        lines.push({ a: V(b.stand[0], a.elev + lift, b.stand[1]), b: V(b.stand[0], b.elev + lift, b.stand[1]) });
+                    }
+                }
+            });
+            this.routes.push({ carton, color, stops, lines, dist, missing });
+        });
+    }
+
+    private clearPaths(): void {
+        if (this.pathMesh) {
+            this.scene.remove(this.pathMesh);
+            this.pathMesh.geometry.dispose();
+            (this.pathMesh.material as THREE.Material).dispose();
+            this.pathMesh = undefined;
+        }
+        for (const sp of this.pathSprites) {
+            this.scene.remove(sp);
+            sp.material.map?.dispose();
+            sp.material.dispose();
+        }
+        this.pathSprites = [];
+    }
+
+    private makeBadge(text: string, color: THREE.Color): THREE.Sprite {
+        const cv = document.createElement("canvas");
+        cv.width = 64; cv.height = 64;
+        const ctx = cv.getContext("2d")!;
+        ctx.beginPath();
+        ctx.arc(32, 32, 28, 0, Math.PI * 2);
+        ctx.fillStyle = "#" + color.getHexString();
+        ctx.fill();
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = "#ffffff";
+        ctx.stroke();
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = `700 ${text.length > 2 ? 24 : 30}px "Segoe UI", sans-serif`;
+        ctx.fillText(text, 32, 34);
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthTest: false }));
+        sp.renderOrder = 12;
+        return sp;
+    }
+
+    private buildPaths(): void {
+        this.clearPaths();
+        const all = this.routes.flatMap((r) => r.lines.map((l) => ({ l, color: r.color })));
+        if (!all.length) return;
+        const t = Math.max(0.03, this.settings.pathsCard.lineSize.value);
+        const mesh = new THREE.InstancedMesh(
+            new THREE.BoxGeometry(1, 1, 1),
+            new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.95, depthTest: false }),
+            all.length
+        );
+        const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), sc = new THREE.Vector3();
+        const dir = new THREE.Vector3(), xAxis = new THREE.Vector3(1, 0, 0);
+        all.forEach(({ l, color }, i) => {
+            dir.subVectors(l.b, l.a);
+            const len = dir.length();
+            if (len > 1e-6) q.setFromUnitVectors(xAxis, dir.clone().normalize()); else q.identity();
+            pos.addVectors(l.a, l.b).multiplyScalar(0.5);
+            sc.set(len + t, t, t);
+            mesh.setMatrixAt(i, m.compose(pos, q, sc));
+            mesh.setColorAt(i, color);
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+        mesh.renderOrder = 11;
+        mesh.frustumCulled = false;
+        mesh.raycast = () => { /* paths never block hover or clicks */ };
+        this.scene.add(mesh);
+        this.pathMesh = mesh;
+
+        for (const r of this.routes) {
+            if (r.stops.length > 80) continue;
+            for (const st of r.stops) {
+                const c = this.cells[st.ci];
+                const sp = this.makeBadge(String(st.n), r.color);
+                sp.scale.set(0.95, 0.95, 1);
+                sp.position.set(c.px, c.pz * this.lvl - this.cubeSize / 2 + c.bh + 0.55, c.py);
+                this.scene.add(sp);
+                this.pathSprites.push(sp);
+            }
+        }
+    }
+
+    private rebuildPaths(): void {
+        this.computePaths();
+        this.buildPaths();
+        this.buildPathPanel();
+        this.applyColors();
+    }
+
+    private refreshPaths(): void {
+        this.rebuildPaths();
+        this.draw();
+    }
+
+    private addCarton(id: string): void {
+        if (!this.pickData.has(id) || this.selectedCartons.includes(id)) return;
+        const max = Math.max(1, Math.min(8, Math.round(this.settings.pathsCard.maxCartons.value)));
+        this.selectedCartons.push(id);
+        while (this.selectedCartons.length > max) this.selectedCartons.shift();
+        this.refreshPaths();
+    }
+
+    private buildPathPanel(): void {
+        const el = this.pathEl;
+        el.replaceChildren();
+        const pc = this.settings.pathsCard;
+        const show = pc.showPaths.value && this.cartonIds.length > 0 && this.cells.length > 0;
+        el.style.display = show ? "block" : "none";
+        if (!show) return;
+
+        const mk = (tag: string, cls: string, text?: string, parent: HTMLElement = el) => {
+            const d = document.createElement(tag);
+            d.className = cls;
+            if (text !== undefined) d.textContent = text;
+            parent.appendChild(d);
+            return d;
+        };
+        mk("div", "hm-ptitle", "Pick paths");
+
+        const wrap = mk("div", "hm-psearch");
+        const input = document.createElement("input");
+        input.type = "text";
+        input.placeholder = `Add a carton (${this.cartonIds.length.toLocaleString()} available)`;
+        wrap.appendChild(input);
+        const list = mk("div", "hm-plist", undefined, wrap);
+        const hitsFor = () => {
+            const t = input.value.trim().toLowerCase();
+            return this.cartonIds.filter((v) => !this.selectedCartons.includes(v) && (t === "" || v.toLowerCase().includes(t)));
+        };
+        const refresh = () => {
+            list.replaceChildren();
+            const hits = hitsFor();
+            hits.slice(0, 8).forEach((v) => {
+                const item = mk("div", "", v, list);
+                item.addEventListener("mousedown", (e) => { e.preventDefault(); this.addCarton(v); });
+            });
+            if (hits.length > 8) mk("div", "hm-more", `${(hits.length - 8).toLocaleString()} more, keep typing`, list);
+            list.style.display = hits.length ? "block" : "none";
+        };
+        input.addEventListener("input", refresh);
+        input.addEventListener("focus", refresh);
+        input.addEventListener("blur", () => { list.style.display = "none"; });
+        input.addEventListener("keydown", (e) => {
+            if (e.key !== "Enter") return;
+            const t = input.value.trim().toLowerCase();
+            const exact = this.cartonIds.find((v) => v.toLowerCase() === t);
+            const hits = hitsFor();
+            if (exact) this.addCarton(exact); else if (hits.length === 1) this.addCarton(hits[0]);
+        });
+
+        const u = pc.unitsPerCell.value, label = pc.distanceUnit.value || "cells";
+        for (const r of this.routes) {
+            const row = mk("div", "hm-chip");
+            const sw = mk("span", "hm-swatch", undefined, row);
+            sw.style.background = "#" + r.color.getHexString();
+            const body = mk("div", "hm-chipbody", undefined, row);
+            mk("div", "hm-chipname", r.carton, body);
+            let info = `${r.stops.length} stops · ${Math.round(r.dist * u).toLocaleString()} ${label}`;
+            if (r.missing) info += ` · ${r.missing} location${r.missing > 1 ? "s" : ""} not found`;
+            mk("div", "hm-chipinfo", info, body);
+            const x = mk("button", "hm-chipx", "×", row);
+            x.title = "Remove";
+            x.addEventListener("click", () => {
+                this.selectedCartons = this.selectedCartons.filter((c) => c !== r.carton);
+                this.refreshPaths();
+            });
+        }
+
+        if (this.selectedCartons.length) {
+            const foot = mk("div", "hm-pfoot");
+            const lab = document.createElement("label");
+            const cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.checked = this.pathDimOverride ?? pc.dimOthers.value;
+            cb.addEventListener("change", () => { this.pathDimOverride = cb.checked; this.applyColors(); this.draw(); });
+            lab.appendChild(cb);
+            lab.appendChild(document.createTextNode(" Dim other bins"));
+            foot.appendChild(lab);
+            const clr = mk("button", "hm-btn", "Clear", foot);
+            clr.addEventListener("click", () => { this.selectedCartons = []; this.refreshPaths(); });
+        }
     }
 
     // ---------- group labels ----------
@@ -1266,6 +1748,7 @@ export class Visual implements IVisual {
     }
 
     public destroy(): void {
+        this.clearPaths();
         this.clearRacking();
         this.clearLabels();
         this.clearGroupLabels();
